@@ -28,7 +28,7 @@ class _ReportScreenState extends State<ReportScreen> {
   ];
 
   // Current map position
-  LatLng currentLocation = LatLng(13.2236, 120.5960);
+  LatLng currentLocation = const LatLng(13.2236, 120.5960);
 
   @override
   Widget build(BuildContext context) {
@@ -60,15 +60,15 @@ class _ReportScreenState extends State<ReportScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Location ──
-            _SectionHeader(
+            const _SectionHeader(
               icon: Icons.location_on_outlined,
               title: 'Location',
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.location_on, size: 16, color: const Color(0xFFF5A623)),
-                  const SizedBox(width: 4),
-                  const Text(
+                  Icon(Icons.location_on, size: 16, color: Color(0xFFF5A623)),
+                  SizedBox(width: 4),
+                  Text(
                     'Tap map to set location',
                     style: TextStyle(
                       color: Color(0xFFF5A623),
@@ -112,7 +112,7 @@ class _ReportScreenState extends State<ReportScreen> {
             ),
             const SizedBox(height: 12),
             _SeveritySelector(
-              levels: ['Low', 'Medium', 'High', 'Critical'],
+              levels: const ['Low', 'Medium', 'High', 'Critical'],
               selected: selectedSeverity,
               onSelect: (val) => setState(() => selectedSeverity = val),
             ),
@@ -125,9 +125,7 @@ class _ReportScreenState extends State<ReportScreen> {
               trailing: Text(
                 selectedImage != null ? '1 Photo' : 'No photo',
                 style: TextStyle(
-                  color: selectedImage != null
-                      ? Colors.green
-                      : Colors.black54,
+                  color: selectedImage != null ? Colors.green : Colors.black54,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -186,10 +184,10 @@ class _ReportScreenState extends State<ReportScreen> {
       SnackBar(
         content: Text(
           '✅ Report submitted!\n'
-              'Category: $selectedCategory\n'
-              'Severity: $selectedSeverity\n'
-              'Location: ${currentLocation.latitude.toStringAsFixed(4)}, ${currentLocation.longitude.toStringAsFixed(4)}'
-              '${selectedImage != null ? '\nPhoto: Attached' : ''}',
+          'Category: $selectedCategory\n'
+          'Severity: $selectedSeverity\n'
+          'Location: ${currentLocation.latitude.toStringAsFixed(4)}, ${currentLocation.longitude.toStringAsFixed(4)}'
+          '${selectedImage != null ? '\nPhoto: Attached' : ''}',
         ),
         backgroundColor: const Color(0xFF4CAF50),
         duration: const Duration(seconds: 4),
@@ -228,8 +226,7 @@ class _InteractiveMapWidget extends StatelessWidget {
           ),
           children: [
             TileLayer(
-              urlTemplate:
-              "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+              urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
               subdomains: const ['a', 'b', 'c'],
               userAgentPackageName: 'com.joshua.resqapp',
             ),
@@ -241,7 +238,7 @@ class _InteractiveMapWidget extends StatelessWidget {
                   height: 50,
                   child: const Icon(
                     Icons.location_pin,
-                    color: const Color(0xFFF5A623),
+                    color: Color(0xFFF5A623),
                     size: 40,
                   ),
                 ),
@@ -382,9 +379,8 @@ class _CategoryGrid extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: isSelected
-                        ? const Color(0xFFF5A623)
-                        : Colors.black87,
+                    color:
+                        isSelected ? const Color(0xFFF5A623) : Colors.black87,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -428,9 +424,8 @@ class _SeveritySelector extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? const Color(0xFFF5A623)
-                      : Colors.transparent,
+                  color:
+                      isSelected ? const Color(0xFFF5A623) : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
@@ -438,9 +433,8 @@ class _SeveritySelector extends StatelessWidget {
                     level,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w400,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w400,
                       color: isSelected ? Colors.white : Colors.black54,
                     ),
                   ),
@@ -472,8 +466,7 @@ class _EvidenceUpload extends StatelessWidget {
 
     if (status.isGranted) {
       final ImagePicker picker = ImagePicker();
-      final XFile? image =
-      await picker.pickImage(source: ImageSource.gallery);
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
 
       if (image != null) {
         onImageSelected(File(image.path));
@@ -494,64 +487,63 @@ class _EvidenceUpload extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selectedImage != null
-                ? Colors.green
-                : const Color(0xFFE8E0D8),
+            color:
+                selectedImage != null ? Colors.green : const Color(0xFFE8E0D8),
             width: selectedImage != null ? 2 : 1,
           ),
         ),
         child: selectedImage != null
             ? Stack(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Image.file(
-                selectedImage!,
-                width: double.infinity,
-                height: double.infinity,
-                fit: BoxFit.cover,
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: GestureDetector(
-                onTap: onRemoveImage,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.file(
+                      selectedImage!,
+                      width: double.infinity,
+                      height: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.close,
-                    color: Colors.white,
-                    size: 20,
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: onRemoveImage,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
+              )
+            : const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 32,
+                    color: Color(0xFFF5A623),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Tap to upload photo',
+                    style: TextStyle(fontSize: 13, color: Colors.black45),
+                  ),
+                  Text(
+                    'JPG, PNG up to 10MB',
+                    style: TextStyle(fontSize: 11, color: Colors.black38),
+                  ),
+                ],
               ),
-            ),
-          ],
-        )
-            : Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(
-              Icons.add_photo_alternate_outlined,
-              size: 32,
-              color: Color(0xFFF5A623),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Tap to upload photo',
-              style: TextStyle(fontSize: 13, color: Colors.black45),
-            ),
-            Text(
-              'JPG, PNG up to 10MB',
-              style: TextStyle(fontSize: 11, color: Colors.black38),
-            ),
-          ],
-        ),
       ),
     );
   }
