@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Performance optimization for iPhone -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+
+	<!-- Default language -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+
+	<!-- App name shown on home screen -->
+	<key>CFBundleDisplayName</key>
+	<string>ResQ - Emergency Response</string>
+
+	<!-- Executable name -->
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+
+	<!-- Unique app identifier -->
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+
+	<!-- Info dictionary version -->
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+
+	<!-- Internal app name -->
+	<key>CFBundleName</key>
+	<string>ResQ</string>
+
+	<!-- App package type -->
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+
+	<!-- App version (visible in App Store) -->
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+
+	<!-- App signature -->
+	<key>CFBundleSignature</key>
+	<string>????</string>
+
+	<!-- Build number -->
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+
+	<!-- Requires iPhone/iPad -->
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+
+	<!-- 🔥 RESQ APP PERMISSIONS (iOS) -->
+	<!-- Camera access for incident photos -->
+	<key>NSCameraUsageDescription</key>
+	<string>ResQ needs camera access to capture photos of emergencies and disasters for faster response.</string>
+
+	<!-- Photo library access for evidence upload -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ResQ needs photo library access to upload evidence photos of incidents.</string>
+
+	<!-- Location access for precise reporting -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>ResQ needs location access to pinpoint exact incident locations for emergency services.</string>
+
+	<!-- Network access for maps -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+
+	<!-- Flutter scene support -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+
+	<!-- Supports indirect input (Apple Pencil, etc.) -->
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+
+	<!-- Launch screen -->
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+
+	<!-- Main storyboard -->
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+
+	<!-- iPhone supported orientations -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<!-- Landscape for map viewing -->
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<!-- iPad supported orientations -->
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
