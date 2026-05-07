@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HotlineScreen extends StatelessWidget {
   const HotlineScreen({super.key});
@@ -35,6 +36,22 @@ class HotlineScreen extends StatelessWidget {
       'color': Color(0xFFF5A623)
     },
   ];
+
+  Future<void> _makeCall(BuildContext context, String number) async {
+    final Uri callUri = Uri(scheme: 'tel', path: number);
+    if (await canLaunchUrl(callUri)) {
+      await launchUrl(callUri);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not launch call to $number'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +123,23 @@ class HotlineScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(Icons.call, color: Color(0xFFF5A623)),
+                // ── Call button ──
+                GestureDetector(
+                  onTap: () => _makeCall(context, h['number'] as String),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5A623).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.call,
+                      color: Color(0xFFF5A623),
+                      size: 20,
+                    ),
+                  ),
+                ),
               ],
             ),
           );

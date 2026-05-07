@@ -4,6 +4,11 @@ import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart'; // Add this dependency
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import '../services/auth_service.dart';
+import '../services/report_service.dart';
+import '../services/storage_service.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -17,6 +22,53 @@ class _ReportScreenState extends State<ReportScreen> {
   String selectedSeverity = 'High';
   File? selectedImage;
   final ImagePicker _picker = ImagePicker();
+  String _addressLabel = 'Fetching location...';
+
+  @override
+  void initState(){
+    super.initState();
+    _getUserLocation();
+  }
+
+  Future<void> _getUserLocation() async {
+    bool serviceEnabled = await Geolocator. isLocationServiceEnabled();
+    if (!serviceEnabled) return;
+
+    LocationPermission permission =   await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied){
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return;
+    }
+
+    Position position = await Geolocator.getCurrentPosition();
+    final newLocation = LatLng(position.latitude, position.longitude);
+    setState(() {
+      currentLocation = newLocation;
+    });
+    await _reverseGeocode(newLocation);
+  }
+
+  Future<void> _reverseGeocode(LatLng location) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        location.latitude,
+        location.longitude,
+      );
+      if (placemarks.isNotEmpty) {
+        final p = placemarks.first;
+        setState(() {
+          _addressLabel =
+            '${p.street ?? ''}, ${p.locality ?? ''}, ${p.administrativeArea ?? ''}';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _addressLabel =
+          '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}';
+      });
+    }
+  }
+
 
   final List<Map<String, dynamic>> categories = [
     {'label': 'Flood', 'icon': Icons.flood_outlined},
@@ -82,14 +134,19 @@ class _ReportScreenState extends State<ReportScreen> {
             const SizedBox(height: 10),
             _InteractiveMapWidget(
               currentLocation: currentLocation,
-              onLocationChanged: (latlng) {
+              onLocationChanged: (latlng) async {
                 setState(() {
                   currentLocation = latlng;
+                  _addressLabel = 'Loading address...';
                 });
+                await _reverseGeocode(latlng);
               },
             ),
             const SizedBox(height: 10),
-            _AddressField(currentLocation: currentLocation),
+            _AddressField(
+              currentLocation: currentLocation,
+              addressLabel: _addressLabel,
+            ),
             const SizedBox(height: 24),
 
             // ── Category ──
@@ -179,25 +236,67 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
-  void _submitReport() {
+  Future<void> _submitReport() async {
+  try {
+    String? imageUrl;
+
+    // Upload image first
+    if (selectedImage != null) {
+      imageUrl = await StorageService
+          .uploadReportImage(selectedImage!);
+    }
+
+    // Submit report
+    final result = await ReportService.submitReport(
+      userId: AuthService().currentUser!.id,
+      category: selectedCategory,
+      severity: selectedSeverity,
+      latitude: currentLocation.latitude,
+      longitude: currentLocation.longitude,
+      address: _addressLabel,
+      imageUrl: imageUrl,
+    );
+
+    if (!mounted) return;
+
+    if (result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Report submitted successfully!'),
+          backgroundColor: Color(0xFF4CAF50),
+        ),
+      );
+
+      setState(() {
+        selectedImage = null;
+        selectedCategory = 'Flood';
+        selectedSeverity = 'High';
+      });
+
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message']),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+
+  } catch (e) {
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          '✅ Report submitted!\n'
-          'Category: $selectedCategory\n'
-          'Severity: $selectedSeverity\n'
-          'Location: ${currentLocation.latitude.toStringAsFixed(4)}, ${currentLocation.longitude.toStringAsFixed(4)}'
-          '${selectedImage != null ? '\nPhoto: Attached' : ''}',
-        ),
-        backgroundColor: const Color(0xFF4CAF50),
-        duration: const Duration(seconds: 4),
+        content: Text('Error: $e'),
+        backgroundColor: Colors.red,
       ),
     );
   }
+} 
 }
 
 // ── INTERACTIVE MAP WIDGET ──
-class _InteractiveMapWidget extends StatelessWidget {
+class _InteractiveMapWidget extends StatefulWidget {
   final LatLng currentLocation;
   final ValueChanged<LatLng> onLocationChanged;
 
@@ -205,6 +304,13 @@ class _InteractiveMapWidget extends StatelessWidget {
     required this.currentLocation,
     required this.onLocationChanged,
   });
+
+  @override
+  State<_InteractiveMapWidget> createState() => _InteractiveMapWidgetState();
+}
+
+class _InteractiveMapWidgetState extends State<_InteractiveMapWidget> {
+  final MapController _mapController = MapController();
 
   @override
   Widget build(BuildContext context) {
@@ -216,33 +322,64 @@ class _InteractiveMapWidget extends StatelessWidget {
           border: Border.all(color: const Color(0xFFE8E0D8)),
           borderRadius: BorderRadius.circular(14),
         ),
-        child: FlutterMap(
-          options: MapOptions(
-            initialCenter: currentLocation,
-            initialZoom: 16.0,
-            onTap: (tapPosition, point) {
-              onLocationChanged(point);
-            },
-          ),
+        child: Stack(
           children: [
-            TileLayer(
-              urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              subdomains: const ['a', 'b', 'c'],
-              userAgentPackageName: 'com.joshua.resqapp',
-            ),
-            MarkerLayer(
-              markers: [
-                Marker(
-                  point: currentLocation,
-                  width: 50,
-                  height: 50,
-                  child: const Icon(
-                    Icons.location_pin,
-                    color: Color(0xFFF5A623),
-                    size: 40,
-                  ),
+            // ── Map ──
+            FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: widget.currentLocation,
+                initialZoom: 16.0,
+                onTap: (tapPosition, point) {
+                  widget.onLocationChanged(point);
+                  _mapController.move(point, _mapController.camera.zoom);
+                },
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  userAgentPackageName: 'com.joshua.resqapp',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: widget.currentLocation,
+                      width: 50,
+                      height: 50,
+                      child: const Icon(
+                        Icons.location_pin,
+                        color: Color(0xFFF5A623),
+                        size: 40,
+                      ),
+                    ),
+                  ],
                 ),
               ],
+            ),
+
+            // ── Zoom buttons (bottom-right corner) ──
+            Positioned(
+              right: 10,
+              bottom: 10,
+              child: Column(
+                children: [
+                  _ZoomButton(
+                    icon: Icons.add,
+                    onTap: () => _mapController.move(
+                      _mapController.camera.center,
+                      _mapController.camera.zoom + 1,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _ZoomButton(
+                    icon: Icons.remove,
+                    onTap: () => _mapController.move(
+                      _mapController.camera.center,
+                      _mapController.camera.zoom - 1,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -254,8 +391,12 @@ class _InteractiveMapWidget extends StatelessWidget {
 // ── ADDRESS FIELD ──
 class _AddressField extends StatelessWidget {
   final LatLng currentLocation;
+  final String addressLabel; // ADD THIS PARAMETER
 
-  const _AddressField({required this.currentLocation});
+  const _AddressField({
+    required this.currentLocation,
+    required this.addressLabel, // ADD THIS
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -275,12 +416,13 @@ class _AddressField extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${currentLocation.latitude.toStringAsFixed(4)}, ${currentLocation.longitude.toStringAsFixed(4)}',
+                  addressLabel, // CHANGED: shows real address instead of raw coords
                   style: const TextStyle(fontSize: 14, color: Colors.black87),
                 ),
-                const Text(
-                  'Tap map to change location',
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                Text(
+                  // Shows raw coords as a subtitle
+                  '${currentLocation.latitude.toStringAsFixed(4)}, ${currentLocation.longitude.toStringAsFixed(4)}',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ],
             ),
@@ -544,6 +686,36 @@ class _EvidenceUpload extends StatelessWidget {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _ZoomButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _ZoomButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(icon, size: 18, color: Colors.black87),
       ),
     );
   }
