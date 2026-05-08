@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
-import '../services/api_service.dart';
 import 'otp_screen.dart';
+import 'report_history_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -730,31 +730,22 @@ class _LoggedInProfile extends StatelessWidget {
             const SizedBox(height: 24),
 
             // ── Menu items ──
-            _ProfileMenuItem(
+            _ProfileMenuItem(   
               icon: Icons.history_outlined,
               label: 'Report History',
-              onTap: () {
-                // TODO: navigate to report history screen
-              },
-            ),
-            _ProfileMenuItem(
-              icon: Icons.notifications_outlined,
-              label: 'Notifications',
-              onTap: () {
-                // TODO: navigate to notifications screen
+              onTap: () { 
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ReportHistoryScreen()
+                  ),
+                );  
               },
             ),
             _ProfileMenuItem(
               icon: Icons.lock_outline,
               label: 'Change Password',
               onTap: () => _handleChangePassword(context),
-            ),
-            _ProfileMenuItem(
-              icon: Icons.help_outline,
-              label: 'Help & Support',
-              onTap: () {
-                // TODO: navigate to help screen
-              },
             ),
             const SizedBox(height: 8),
             _ProfileMenuItem(

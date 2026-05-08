@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StorageService {
@@ -6,21 +7,56 @@ class StorageService {
 
   static Future<String?> uploadReportImage(File imageFile) async {
     try {
-      final fileName =
-          'report_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      // ── Validate file exists and has content ──────────────────────────────
+      if (!await imageFile.exists()) {
+        debugPrint('STORAGE ERROR: File does not exist at ${imageFile.path}');
+        return null;
+      }
 
+      final fileSize = await imageFile.length();
+      if (fileSize == 0) {
+        debugPrint('STORAGE ERROR: File is empty');
+        return null;
+      }
+      debugPrint('STORAGE: Uploading file — size: $fileSize bytes, path: ${imageFile.path}');
+
+      // ── Build a unique file name ──────────────────────────────────────────
+      // Include user ID in the path so per-user RLS policies work correctly.
+      // Path format: user_id/timestamp.jpg
+      final userId = _supabase.auth.currentSession?.user.id ?? 'anonymous';
+      final fileName = '$userId/${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      debugPrint('STORAGE: Uploading to bucket "report-images" at path "$fileName"');
+
+      // ── Upload ────────────────────────────────────────────────────────────
       await _supabase.storage
           .from('report-images')
-          .upload(fileName, imageFile);
+          .upload(
+            fileName,
+            imageFile,
+            fileOptions: const FileOptions(
+              contentType: 'image/jpeg',
+              upsert: false,
+            ),
+          );
 
+      // ── Get public URL ────────────────────────────────────────────────────
       final imageUrl = _supabase.storage
           .from('report-images')
           .getPublicUrl(fileName);
 
+      debugPrint('STORAGE: Upload successful. Public URL: $imageUrl');
       return imageUrl;
-    } catch (e) {
-      print('IMAGE UPLOAD ERROR: $e');
-      return null;
+
+    } on StorageException catch (e) {
+      // Supabase storage-specific errors (RLS, bucket not found, etc.)
+      debugPrint('STORAGE StorageException: ${e.message} | statusCode: ${e.statusCode}');
+      debugPrint('STORAGE Hint: Check bucket RLS policies — "report-images" bucket must allow INSERT for authenticated users.');
+      rethrow; // Re-throw so _submitReport can show the actual error to the user
+    } catch (e, stack) {
+      debugPrint('STORAGE unexpected error: $e');
+      debugPrint('$stack');
+      rethrow;
     }
   }
 }

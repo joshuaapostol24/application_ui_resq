@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:image_picker/image_picker.dart'; // Add this dependency
+import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geocoding/geocoding.dart';
@@ -22,20 +22,28 @@ class _ReportScreenState extends State<ReportScreen> {
   String selectedSeverity = 'High';
   File? selectedImage;
   final ImagePicker _picker = ImagePicker();
+  final TextEditingController _descriptionController = TextEditingController();
   String _addressLabel = 'Fetching location...';
+  bool _isSubmitting = false;
 
   @override
-  void initState(){
+  void initState() {
     super.initState();
     _getUserLocation();
   }
 
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
   Future<void> _getUserLocation() async {
-    bool serviceEnabled = await Geolocator. isLocationServiceEnabled();
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return;
 
-    LocationPermission permission =   await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied){
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) return;
     }
@@ -58,17 +66,16 @@ class _ReportScreenState extends State<ReportScreen> {
         final p = placemarks.first;
         setState(() {
           _addressLabel =
-            '${p.street ?? ''}, ${p.locality ?? ''}, ${p.administrativeArea ?? ''}';
+              '${p.street ?? ''}, ${p.locality ?? ''}, ${p.administrativeArea ?? ''}';
         });
       }
     } catch (e) {
       setState(() {
         _addressLabel =
-          '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}';
+            '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}';
       });
     }
   }
-
 
   final List<Map<String, dynamic>> categories = [
     {'label': 'Flood', 'icon': Icons.flood_outlined},
@@ -79,8 +86,83 @@ class _ReportScreenState extends State<ReportScreen> {
     {'label': 'Others', 'icon': Icons.more_horiz},
   ];
 
-  // Current map position
   LatLng currentLocation = const LatLng(13.2236, 120.5960);
+
+  // ── Image Picker ─────────────────────────────────────────────────────────
+  // Picking directly from the gallery via ImagePicker handles its own
+  // permission dialog on both Android and iOS.  We only need to call
+  // Permission.photos as a fallback check so we can surface a clear error
+  // when the user has permanently denied access.
+  Future<void> _pickImage() async {
+    // Try picking directly first — ImagePicker shows the system dialog.
+    // This works on iOS and Android 13+ without needing us to call
+    // Permission.photos first.
+    try {
+      final XFile? image =
+          await _picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        setState(() => selectedImage = File(image.path));
+      }
+      return;
+    } catch (e) {
+      // Fall through to the manual permission check below.
+      debugPrint('ImagePicker direct pick failed: $e');
+    }
+
+    // If picking failed, check why — likely a permanent denial.
+    final status = await Permission.photos.status;
+    if (status.isPermanentlyDenied) {
+      if (mounted) {
+        _showPermissionDeniedDialog();
+      }
+      return;
+    }
+
+    // Request permission explicitly and try once more.
+    final result = await Permission.photos.request();
+    if (result.isGranted || result.isLimited) {
+      final XFile? image =
+          await _picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        setState(() => selectedImage = File(image.path));
+      }
+    } else if (result.isPermanentlyDenied && mounted) {
+      _showPermissionDeniedDialog();
+    }
+  }
+
+  void _showPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Photo Access Required',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text(
+          'ResQ needs access to your photo library to upload evidence. '
+          'Please enable it in your device Settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: Colors.black45)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              openAppSettings();
+            },
+            child: const Text('Open Settings',
+                style: TextStyle(
+                    color: Color(0xFFF5A623),
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -182,7 +264,8 @@ class _ReportScreenState extends State<ReportScreen> {
               trailing: Text(
                 selectedImage != null ? '1 Photo' : 'No photo',
                 style: TextStyle(
-                  color: selectedImage != null ? Colors.green : Colors.black54,
+                  color:
+                      selectedImage != null ? Colors.green : Colors.black54,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -191,20 +274,44 @@ class _ReportScreenState extends State<ReportScreen> {
             const SizedBox(height: 12),
             _EvidenceUpload(
               selectedImage: selectedImage,
-              onImageSelected: (image) {
-                setState(() {
-                  selectedImage = image;
-                });
-              },
-              onRemoveImage: () {
-                setState(() {
-                  selectedImage = null;
-                });
-              },
+              onPickImage: _pickImage,
+              onRemoveImage: () => setState(() => selectedImage = null),
+            ),
+            const SizedBox(height: 24),
+
+            // ── Description ──
+            const _SectionHeader(
+              icon: Icons.description_outlined,
+              title: 'Description',
+            ),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE8E0D8)),
+              ),
+              child: TextField(
+                controller: _descriptionController,
+                maxLines: 4,
+                maxLength: 500,
+                textInputAction: TextInputAction.newline,
+                style: const TextStyle(fontSize: 14, color: Colors.black87),
+                decoration: InputDecoration(
+                  hintText:
+                      'Describe what happened — include any important details '
+                      'that will help responders (e.g. number of people affected, '
+                      'road accessibility, hazards present).',
+                  hintStyle: const TextStyle(
+                      color: Colors.black38, fontSize: 13, height: 1.5),
+                  contentPadding: const EdgeInsets.all(14),
+                  border: InputBorder.none,
+                  counterStyle:
+                      const TextStyle(color: Colors.black38, fontSize: 11),
+                ),
+              ),
             ),
             const SizedBox(height: 32),
-
-            // ── Submit ──
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -216,17 +323,24 @@ class _ReportScreenState extends State<ReportScreen> {
                   ),
                   elevation: 0,
                 ),
-                onPressed: () {
-                  _submitReport();
-                },
-                child: const Text(
-                  'Submit Report',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
+                onPressed: _isSubmitting ? null : _submitReport,
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : const Text(
+                        'Submit Report',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 24),
@@ -236,66 +350,94 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
+  // ── Submit Report ─────────────────────────────────────────────────────────
   Future<void> _submitReport() async {
-  try {
-    String? imageUrl;
+    setState(() => _isSubmitting = true);
 
-    // Upload image first
-    if (selectedImage != null) {
-      imageUrl = await StorageService
-          .uploadReportImage(selectedImage!);
-    }
+    try {
+      String? imageUrl;
 
-    // Submit report
-    final result = await ReportService.submitReport(
-      userId: AuthService().currentUser!.id,
-      category: selectedCategory,
-      severity: selectedSeverity,
-      latitude: currentLocation.latitude,
-      longitude: currentLocation.longitude,
-      address: _addressLabel,
-      imageUrl: imageUrl,
-    );
+      // ── Upload image if one was selected ──
+      if (selectedImage != null) {
+        debugPrint('SUBMIT: Starting image upload...');
+        try {
+          imageUrl = await StorageService.uploadReportImage(selectedImage!);
+          debugPrint('SUBMIT: Image URL received: $imageUrl');
+        } catch (uploadError) {
+          // Image upload failed — show a specific error and stop.
+          // Do NOT submit the report without image if the user added one,
+          // since it may be key evidence.  Change this to `imageUrl = null`
+          // and remove the early return if you'd rather submit anyway.
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Image upload failed: $uploadError\n'
+                'Check that your Supabase "report-images" bucket exists '
+                'and has INSERT permission for authenticated users.',
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+          return;
+        }
+      }
 
-    if (!mounted) return;
-
-    if (result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Report submitted successfully!'),
-          backgroundColor: Color(0xFF4CAF50),
-        ),
+      // ── Submit report row ──
+      debugPrint('SUBMIT: Submitting report row...');
+      final result = await ReportService.submitReport(
+        userId: AuthService().currentUser!.id,
+        category: selectedCategory,
+        severity: selectedSeverity,
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+        address: _addressLabel,
+        description: _descriptionController.text.trim(),
+        imageUrl: imageUrl,
       );
 
-      setState(() {
-        selectedImage = null;
-        selectedCategory = 'Flood';
-        selectedSeverity = 'High';
-      });
+      if (!mounted) return;
 
-    } else {
+      if (result['success']) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Report submitted successfully!'),
+            backgroundColor: Color(0xFF4CAF50),
+          ),
+        );
+        setState(() {
+          selectedImage = null;
+          selectedCategory = 'Flood';
+          selectedSeverity = 'High';
+          _descriptionController.clear();
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Report failed: ${result['message']}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message']),
+          content: Text('Unexpected error: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
-
-  } catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Error: $e'),
-        backgroundColor: Colors.red,
-      ),
-    );
   }
-} 
 }
 
-// ── INTERACTIVE MAP WIDGET ──
+// ── INTERACTIVE MAP WIDGET ────────────────────────────────────────────────────
+
 class _InteractiveMapWidget extends StatefulWidget {
   final LatLng currentLocation;
   final ValueChanged<LatLng> onLocationChanged;
@@ -324,7 +466,6 @@ class _InteractiveMapWidgetState extends State<_InteractiveMapWidget> {
         ),
         child: Stack(
           children: [
-            // ── Map ──
             FlutterMap(
               mapController: _mapController,
               options: MapOptions(
@@ -337,7 +478,8 @@ class _InteractiveMapWidgetState extends State<_InteractiveMapWidget> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  urlTemplate:
+                      "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                   userAgentPackageName: 'com.joshua.resqapp',
                 ),
                 MarkerLayer(
@@ -356,8 +498,6 @@ class _InteractiveMapWidgetState extends State<_InteractiveMapWidget> {
                 ),
               ],
             ),
-
-            // ── Zoom buttons (bottom-right corner) ──
             Positioned(
               right: 10,
               bottom: 10,
@@ -388,14 +528,15 @@ class _InteractiveMapWidgetState extends State<_InteractiveMapWidget> {
   }
 }
 
-// ── ADDRESS FIELD ──
+// ── ADDRESS FIELD ─────────────────────────────────────────────────────────────
+
 class _AddressField extends StatelessWidget {
   final LatLng currentLocation;
-  final String addressLabel; // ADD THIS PARAMETER
+  final String addressLabel;
 
   const _AddressField({
     required this.currentLocation,
-    required this.addressLabel, // ADD THIS
+    required this.addressLabel,
   });
 
   @override
@@ -416,13 +557,15 @@ class _AddressField extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  addressLabel, // CHANGED: shows real address instead of raw coords
-                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                  addressLabel,
+                  style:
+                      const TextStyle(fontSize: 14, color: Colors.black87),
                 ),
                 Text(
-                  // Shows raw coords as a subtitle
-                  '${currentLocation.latitude.toStringAsFixed(4)}, ${currentLocation.longitude.toStringAsFixed(4)}',
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  '${currentLocation.latitude.toStringAsFixed(4)}, '
+                  '${currentLocation.longitude.toStringAsFixed(4)}',
+                  style:
+                      const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ],
             ),
@@ -433,7 +576,8 @@ class _AddressField extends StatelessWidget {
   }
 }
 
-// ── SECTION HEADER ──
+// ── SECTION HEADER ────────────────────────────────────────────────────────────
+
 class _SectionHeader extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -466,7 +610,8 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-// ── CATEGORY GRID ──
+// ── CATEGORY GRID ─────────────────────────────────────────────────────────────
+
 class _CategoryGrid extends StatelessWidget {
   final List<Map<String, dynamic>> categories;
   final String selected;
@@ -498,7 +643,9 @@ class _CategoryGrid extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFFFFF3E0) : Colors.white,
+              color: isSelected
+                  ? const Color(0xFFFFF3E0)
+                  : Colors.white,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: isSelected
@@ -513,7 +660,9 @@ class _CategoryGrid extends StatelessWidget {
                 Icon(
                   cat['icon'] as IconData,
                   size: 28,
-                  color: isSelected ? const Color(0xFFF5A623) : Colors.black87,
+                  color: isSelected
+                      ? const Color(0xFFF5A623)
+                      : Colors.black87,
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -521,8 +670,9 @@ class _CategoryGrid extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color:
-                        isSelected ? const Color(0xFFF5A623) : Colors.black87,
+                    color: isSelected
+                        ? const Color(0xFFF5A623)
+                        : Colors.black87,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -535,7 +685,8 @@ class _CategoryGrid extends StatelessWidget {
   }
 }
 
-// ── SEVERITY SELECTOR ──
+// ── SEVERITY SELECTOR ─────────────────────────────────────────────────────────
+
 class _SeveritySelector extends StatelessWidget {
   final List<String> levels;
   final String selected;
@@ -566,8 +717,9 @@ class _SeveritySelector extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color:
-                      isSelected ? const Color(0xFFF5A623) : Colors.transparent,
+                  color: isSelected
+                      ? const Color(0xFFF5A623)
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
@@ -575,9 +727,11 @@ class _SeveritySelector extends StatelessWidget {
                     level,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w400,
-                      color: isSelected ? Colors.white : Colors.black54,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      color:
+                          isSelected ? Colors.white : Colors.black54,
                     ),
                   ),
                 ),
@@ -590,38 +744,24 @@ class _SeveritySelector extends StatelessWidget {
   }
 }
 
-// ── EVIDENCE UPLOAD WITH PHOTO PICKER ──
+// ── EVIDENCE UPLOAD ───────────────────────────────────────────────────────────
+// Now receives callbacks from the parent — no longer owns any async logic.
+
 class _EvidenceUpload extends StatelessWidget {
   final File? selectedImage;
-  final ValueChanged<File?> onImageSelected;
+  final VoidCallback onPickImage;
   final VoidCallback onRemoveImage;
 
   const _EvidenceUpload({
     this.selectedImage,
-    required this.onImageSelected,
+    required this.onPickImage,
     required this.onRemoveImage,
   });
-
-  Future<void> _pickImage() async {
-    // Request permission first
-    var status = await Permission.photos.request();
-
-    if (status.isGranted) {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-
-      if (image != null) {
-        onImageSelected(File(image.path));
-      }
-    } else {
-      print("Permission denied");
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: _pickImage,
+      onTap: onPickImage,
       child: Container(
         height: 120,
         width: double.infinity,
@@ -629,8 +769,9 @@ class _EvidenceUpload extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color:
-                selectedImage != null ? Colors.green : const Color(0xFFE8E0D8),
+            color: selectedImage != null
+                ? Colors.green
+                : const Color(0xFFE8E0D8),
             width: selectedImage != null ? 2 : 1,
           ),
         ),
@@ -678,11 +819,13 @@ class _EvidenceUpload extends StatelessWidget {
                   SizedBox(height: 8),
                   Text(
                     'Tap to upload photo',
-                    style: TextStyle(fontSize: 13, color: Colors.black45),
+                    style:
+                        TextStyle(fontSize: 13, color: Colors.black45),
                   ),
                   Text(
                     'JPG, PNG up to 10MB',
-                    style: TextStyle(fontSize: 11, color: Colors.black38),
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.black38),
                   ),
                 ],
               ),
@@ -690,6 +833,8 @@ class _EvidenceUpload extends StatelessWidget {
     );
   }
 }
+
+// ── ZOOM BUTTON ───────────────────────────────────────────────────────────────
 
 class _ZoomButton extends StatelessWidget {
   final IconData icon;

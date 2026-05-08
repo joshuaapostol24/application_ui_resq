@@ -10,6 +10,7 @@ class ReportService {
     required double latitude,
     required double longitude,
     required String address,
+    required String description,
     String? imageUrl,
   }) async {
     try {
@@ -20,6 +21,7 @@ class ReportService {
         'latitude': latitude,
         'longitude': longitude,
         'address': address,
+        'description': description,
         'image_url': imageUrl,
         'status': 'pending',
       });
@@ -30,6 +32,21 @@ class ReportService {
         'success': false,
         'message': e.toString(),
       };
+      }
+    }
+  static Future<List<Map<String, dynamic>>> getUserReports(
+    String userId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('reports')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      return [];
     }
   }
 }
