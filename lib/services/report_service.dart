@@ -16,11 +16,11 @@ class ReportService {
     try {
       await _supabase.from('reports').insert({
         'user_id': userId,
-        'category': category,
-        'severity': severity,
-        'latitude': latitude,
-        'longitude': longitude,
-        'address': address,
+        'type': category,
+        'priority': severity,
+        'lat': latitude,
+        'lng': longitude,
+        'location': address,
         'description': description,
         'image_url': imageUrl,
         'status': 'pending',

@@ -10,73 +10,125 @@ class NewsScreen extends StatefulWidget {
 }
 
 class _NewsScreenState extends State<NewsScreen> {
-  static const String baseUrl =
+  static const String _baseUrl =
       'https://resq-app-xsb98.ondigitalocean.app';
 
-  List<dynamic> news = [];
-  bool isLoading = true;
+  List<Map<String, dynamic>> _news = [];
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    fetchNews();
+    _fetchNews();
   }
 
-  Future<void> fetchNews() async {
+  Future<void> _fetchNews() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/public/news'),
-      );
+      // Uses the same collection the admin dashboard reads from.
+      // Field names match exactly: title, message, category, priority,
+      // date, audience, pinned.
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/news/public'))
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+
+        // Backend returns a List directly (same as /api/news/all)
+        final List<dynamic> raw = decoded is List ? decoded : [];
+
         setState(() {
-          news = jsonDecode(response.body);
-          isLoading = false;
+          _news = raw.cast<Map<String, dynamic>>();
+          _isLoading = false;
         });
       } else {
-        setState(() => isLoading = false);
+        setState(() {
+          _error = 'Server error ${response.statusCode}.';
+          _isLoading = false;
+        });
       }
     } catch (e) {
-      debugPrint("News fetch error: $e");
-      setState(() => isLoading = false);
+      setState(() {
+        _error = 'Could not connect to the server.';
+        _isLoading = false;
+      });
     }
   }
 
-  IconData getIcon(String category) {
+  // ── Pinned item (shown at the top if present) ─────────────────────────────
+  Map<String, dynamic>? get _pinned {
+    try {
+      return _news.firstWhere(
+        (item) => (item['pinned'] ?? '').toString().toLowerCase() == 'yes',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Non-pinned items ──────────────────────────────────────────────────────
+  List<Map<String, dynamic>> get _latest => _news
+      .where(
+        (item) => (item['pinned'] ?? '').toString().toLowerCase() != 'yes',
+      )
+      .toList();
+
+  // ── Icon by category ──────────────────────────────────────────────────────
+  IconData _icon(String category) {
     switch (category.toLowerCase()) {
       case 'weather':
         return Icons.cloud_outlined;
-
       case 'emergency':
         return Icons.warning_amber_rounded;
-
       case 'disaster alert':
+      case 'disaster':
         return Icons.crisis_alert_outlined;
-
       case 'advisory':
         return Icons.campaign_outlined;
-
       case 'missing person':
+      case 'missing':
         return Icons.person_search_outlined;
-
+      case 'health':
+        return Icons.health_and_safety_outlined;
       default:
         return Icons.notifications_outlined;
     }
   }
 
-  Color getColor(String priority) {
+  // ── Accent color by priority ──────────────────────────────────────────────
+  Color _color(String priority) {
     switch (priority.toLowerCase()) {
       case 'emergency':
-        return Colors.red;
-
+      case 'critical':
+        return const Color(0xFFB71C1C);
       case 'high':
-        return Colors.orange;
-
+        return const Color(0xFFE65100);
       case 'moderate':
-        return Colors.blue;
-
+      case 'medium':
+        return const Color(0xFF1565C0);
+      case 'low':
+      case 'normal':
       default:
-        return Colors.teal;
+        return const Color(0xFF00695C);
+    }
+  }
+
+  // ── Date formatter ────────────────────────────────────────────────────────
+  String _formatDate(dynamic raw) {
+    if (raw == null || raw.toString().isEmpty) return '';
+    try {
+      final dt = DateTime.parse(raw.toString()).toLocal();
+      return '${dt.day}/${dt.month}/${dt.year}  '
+          '${dt.hour.toString().padLeft(2, '0')}:'
+          '${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return raw.toString();
     }
   }
 
@@ -84,7 +136,6 @@ class _NewsScreenState extends State<NewsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0EB),
-
       appBar: AppBar(
         backgroundColor: const Color(0xFFF5F0EB),
         elevation: 0,
@@ -92,108 +143,378 @@ class _NewsScreenState extends State<NewsScreen> {
         title: const Text(
           'News & Alerts',
           style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.w600,
+              color: Colors.black87, fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.black54),
+            onPressed: _fetchNews,
+          ),
+        ],
+      ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    // ── Loading ──
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFFF5A623)),
+      );
+    }
+
+    // ── Error ──
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.wifi_off_outlined,
+                  size: 48, color: Colors.black26),
+              const SizedBox(height: 16),
+              const Text('Could not load announcements',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black54)),
+              const SizedBox(height: 8),
+              Text(_error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 13, color: Colors.black38)),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF5A623),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: _fetchNews,
+                icon: const Icon(Icons.refresh,
+                    color: Colors.white, size: 16),
+                label: const Text('Retry',
+                    style: TextStyle(color: Colors.white)),
+              ),
+            ],
           ),
         ),
+      );
+    }
+
+    // ── Empty ──
+    if (_news.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.campaign_outlined,
+                size: 48, color: Colors.black26),
+            const SizedBox(height: 16),
+            const Text('No announcements yet',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black54)),
+            const SizedBox(height: 8),
+            const Text('New alerts will appear here when posted.',
+                style: TextStyle(fontSize: 13, color: Colors.black38)),
+            const SizedBox(height: 24),
+            TextButton.icon(
+              onPressed: _fetchNews,
+              icon: const Icon(Icons.refresh,
+                  size: 16, color: Color(0xFFF5A623)),
+              label: const Text('Refresh',
+                  style: TextStyle(color: Color(0xFFF5A623))),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Content ──
+    return RefreshIndicator(
+      color: const Color(0xFFF5A623),
+      onRefresh: _fetchNews,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // ── Pinned banner ──
+          if (_pinned != null) ...[
+            _PinnedCard(
+              item: _pinned!,
+              icon: _icon(_pinned!['category'] ?? ''),
+              color: _color(_pinned!['priority'] ?? ''),
+              date: _formatDate(_pinned!['date']),
+            ),
+            const SizedBox(height: 16),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: Text(
+                'Latest Announcements',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black45,
+                    letterSpacing: 0.5),
+              ),
+            ),
+          ],
+
+          // ── Latest list ──
+          ..._latest.map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _NewsCard(
+                  item: item,
+                  icon: _icon(item['category'] ?? ''),
+                  color: _color(item['priority'] ?? ''),
+                  date: _formatDate(item['date']),
+                ),
+              )),
+        ],
       ),
+    );
+  }
+}
 
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
+// ── Pinned Card ───────────────────────────────────────────────────────────────
 
-          : news.isEmpty
-              ? const Center(
-                  child: Text("No announcements available"),
-                )
+class _PinnedCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final IconData icon;
+  final Color color;
+  final String date;
 
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: news.length,
-                  separatorBuilder: (_, __) =>
-                      const SizedBox(height: 10),
+  const _PinnedCard({
+    required this.item,
+    required this.icon,
+    required this.color,
+    required this.date,
+  });
 
-                  itemBuilder: (context, index) {
-                    final item = news[index];
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.35), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  item['title'] ?? '',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'PINNED',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            item['message'] ?? '',
+            style: const TextStyle(
+                fontSize: 14, color: Colors.black87, height: 1.45),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _MetaChip(label: item['category'] ?? '', color: color),
+              _MetaChip(label: item['priority'] ?? '', color: color),
+              if ((item['audience'] ?? '').toString().isNotEmpty)
+                _MetaChip(label: item['audience'].toString(), color: color),
+              if (date.isNotEmpty)
+                _MetaChip(label: date, color: Colors.black38),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-                    final category =
-                        item['category'] ?? 'General';
+// ── Regular News Card ─────────────────────────────────────────────────────────
 
-                    final priority =
-                        item['priority'] ?? 'Low';
+class _NewsCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final IconData icon;
+  final Color color;
+  final String date;
 
-                    return Container(
-                      padding: const EdgeInsets.all(14),
+  const _NewsCard({
+    required this.item,
+    required this.icon,
+    required this.color,
+    required this.date,
+  });
 
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-
-                        border: Border.all(
-                          color: const Color(0xFFE8E0D8),
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8E0D8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item['title'] ?? '',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
                         ),
                       ),
-
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-
-                            decoration: BoxDecoration(
-                              color: getColor(priority)
-                                  .withOpacity(0.1),
-
-                              borderRadius:
-                                  BorderRadius.circular(12),
-                            ),
-
-                            child: Icon(
-                              getIcon(category),
-                              color: getColor(priority),
-                              size: 22,
-                            ),
-                          ),
-
-                          const SizedBox(width: 12),
-
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-
-                              children: [
-                                Text(
-                                  item['title'] ?? '',
-
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                  ),
-                                ),
-
-                                const SizedBox(height: 2),
-
-                                Text(
-                                  item['message'] ?? '',
-
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-
-                                  style: const TextStyle(
-                                    color: Colors.black45,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                    );
-                  },
+                      child: Text(
+                        (item['priority'] ?? '').toString().toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  item['message'] ?? '',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 13, color: Colors.black54, height: 1.4),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    _MetaChip(
+                        label: item['category'] ?? '',
+                        color: color,
+                        small: true),
+                    if ((item['audience'] ?? '').toString().isNotEmpty)
+                      _MetaChip(
+                          label: item['audience'].toString(),
+                          color: Colors.black38,
+                          small: true),
+                    if (date.isNotEmpty)
+                      _MetaChip(
+                          label: date,
+                          color: Colors.black38,
+                          small: true),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Meta Chip ─────────────────────────────────────────────────────────────────
+
+class _MetaChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool small;
+
+  const _MetaChip({
+    required this.label,
+    required this.color,
+    this.small = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: EdgeInsets.symmetric(
+          horizontal: small ? 6 : 8, vertical: small ? 1 : 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: small ? 10 : 11,
+          fontWeight: FontWeight.w500,
+          color: color,
+        ),
+      ),
     );
   }
 }

@@ -3,89 +3,67 @@ import 'package:latlong2/latlong.dart';
 
 class ReportModel {
   final String id;
-  final String userId;
-  final String category;
-  final String severity;
-  final double latitude;
-  final double longitude;
-  final String address;
-  final String description;
-  final String? imageUrl;
+  final String title;
+  final String type;       // Supabase column: 'type'  (was 'category')
+  final String priority;   // Supabase column: 'priority' (was 'severity')
   final String status;
+  final String reporter;
+  final String mobile;
+  final String location;   // Supabase column: 'location' (was 'address')
+  final String description;
+  final String assignedTo;
+  final String responder;
+  final int etaMinutes;
+  final double lat;        // Supabase column: 'lat'
+  final double lng;        // Supabase column: 'lng'
+  final String? imageUrl;
   final DateTime createdAt;
 
   ReportModel({
     required this.id,
-    required this.userId,
-    required this.category,
-    required this.severity,
-    required this.latitude,
-    required this.longitude,
-    required this.address,
-    required this.description,
-    this.imageUrl,
+    required this.title,
+    required this.type,
+    required this.priority,
     required this.status,
+    required this.reporter,
+    required this.mobile,
+    required this.location,
+    required this.description,
+    required this.assignedTo,
+    required this.responder,
+    required this.etaMinutes,
+    required this.lat,
+    required this.lng,
+    this.imageUrl,
     required this.createdAt,
   });
 
-  LatLng get latLng => LatLng(latitude, longitude);
+  LatLng get latLng => LatLng(lat, lng);
 
-  // ── Parse from MongoDB/backend JSON ──────────────────────────────────────
-  // Handles both Mongo _id and Supabase-style id fields gracefully.
+  // ── Convenience aliases so existing code keeps working ────────────────────
+  String get category => type;
+  String get severity => priority;
+  String get address => location;
+
+  // ── Parse from Supabase row ───────────────────────────────────────────────
   factory ReportModel.fromJson(Map<String, dynamic> json) {
-    // ID — MongoDB uses '_id' which may be a string or a nested {'$oid': '...'}
-    String id = '';
-    if (json['_id'] != null) {
-      final raw = json['_id'];
-      id = raw is Map ? (raw['\$oid'] ?? '').toString() : raw.toString();
-    } else if (json['id'] != null) {
-      id = json['id'].toString();
-    }
-
-    // Coordinates — accept both top-level fields and a nested 'location' object
-    double lat = 0;
-    double lng = 0;
-    if (json['latitude'] != null && json['longitude'] != null) {
-      lat = _toDouble(json['latitude']);
-      lng = _toDouble(json['longitude']);
-    } else if (json['location'] is Map) {
-      final loc = json['location'] as Map;
-      // GeoJSON stores [longitude, latitude]
-      final coords = loc['coordinates'];
-      if (coords is List && coords.length >= 2) {
-        lng = _toDouble(coords[0]);
-        lat = _toDouble(coords[1]);
-      }
-    }
-
-    // Timestamp — accept ISO strings, epoch ints, or Mongo $date objects
-    DateTime createdAt = DateTime.now();
-    final raw = json['created_at'] ?? json['createdAt'] ?? json['timestamp'];
-    if (raw != null) {
-      if (raw is String) {
-        createdAt = DateTime.tryParse(raw) ?? DateTime.now();
-      } else if (raw is int) {
-        createdAt = DateTime.fromMillisecondsSinceEpoch(raw);
-      } else if (raw is Map && raw['\$date'] != null) {
-        final d = raw['\$date'];
-        createdAt = d is String
-            ? DateTime.tryParse(d) ?? DateTime.now()
-            : DateTime.fromMillisecondsSinceEpoch(d as int);
-      }
-    }
-
     return ReportModel(
-      id: id,
-      userId: (json['user_id'] ?? json['userId'] ?? '').toString(),
-      category: (json['category'] ?? 'Unknown').toString(),
-      severity: (json['severity'] ?? 'Unknown').toString(),
-      latitude: lat,
-      longitude: lng,
-      address: (json['address'] ?? '').toString(),
+      id: (json['id'] ?? '').toString(),
+      title: (json['title'] ?? 'Untitled Report').toString(),
+      type: (json['type'] ?? 'Others').toString(),
+      priority: (json['priority'] ?? 'medium').toString(),
+      status: (json['status'] ?? 'received').toString(),
+      reporter: (json['reporter'] ?? 'Anonymous').toString(),
+      mobile: (json['mobile'] ?? '').toString(),
+      location: (json['location'] ?? '').toString(),
       description: (json['description'] ?? '').toString(),
-      imageUrl: json['image_url']?.toString() ?? json['imageUrl']?.toString(),
-      status: (json['status'] ?? 'pending').toString(),
-      createdAt: createdAt,
+      assignedTo: (json['assigned_to'] ?? 'Unassigned').toString(),
+      responder: (json['responder'] ?? '').toString(),
+      etaMinutes: _toInt(json['eta_minutes']),
+      lat: _toDouble(json['lat']),
+      lng: _toDouble(json['lng']),
+      imageUrl: json['image_url']?.toString(),
+      createdAt: _parseDate(json['created_at']),
     );
   }
 
@@ -96,10 +74,22 @@ class ReportModel {
     return double.tryParse(v.toString()) ?? 0;
   }
 
+  static int _toInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    return int.tryParse(v.toString()) ?? 0;
+  }
+
+  static DateTime _parseDate(dynamic v) {
+    if (v == null) return DateTime.now();
+    if (v is String) return DateTime.tryParse(v) ?? DateTime.now();
+    return DateTime.now();
+  }
+
   // ── UI helpers ────────────────────────────────────────────────────────────
 
   Color get categoryColor {
-    switch (category.toLowerCase()) {
+    switch (type.toLowerCase()) {
       case 'flood':
         return const Color(0xFF1565C0);
       case 'fire':
@@ -116,7 +106,7 @@ class ReportModel {
   }
 
   IconData get categoryIcon {
-    switch (category.toLowerCase()) {
+    switch (type.toLowerCase()) {
       case 'flood':
         return Icons.flood_outlined;
       case 'fire':
@@ -133,12 +123,13 @@ class ReportModel {
   }
 
   Color get severityColor {
-    switch (severity.toLowerCase()) {
+    switch (priority.toLowerCase()) {
       case 'critical':
         return const Color(0xFFB71C1C);
       case 'high':
         return const Color(0xFFE53935);
       case 'medium':
+      case 'moderate':
         return const Color(0xFFF5A623);
       case 'low':
         return const Color(0xFF43A047);

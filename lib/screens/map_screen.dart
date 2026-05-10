@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/report_model.dart';
-import '../services/mongo_service.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -13,13 +13,12 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
+  final _supabase = Supabase.instance.client;
 
   List<ReportModel> _reports = [];
   bool _isLoading = true;
   String? _errorMessage;
-  ReportModel? _selectedReport; // tapped marker
 
-  // Category filter — null means "show all"
   String? _filterCategory;
   static const _categories = [
     'All', 'Flood', 'Fire', 'Earthquake', 'Landslide', 'Power', 'Others'
@@ -31,17 +30,26 @@ class _MapScreenState extends State<MapScreen> {
     _fetchReports();
   }
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Fetch from Supabase (same source as admin dashboard) ──────────────────
   Future<void> _fetchReports() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
     try {
-      final reports = await MongoService.getReports();
+      final response = await _supabase
+          .from('reports')
+          .select('*')
+          .order('created_at', ascending: false);
+
+      final List<ReportModel> parsed = (response as List)
+          .map((row) => ReportModel.fromJson(row as Map<String, dynamic>))
+          .where((r) => r.lat != 0 && r.lng != 0) // skip rows with no coords
+          .toList();
+
       if (mounted) {
         setState(() {
-          _reports = reports;
+          _reports = parsed;
           _isLoading = false;
         });
       }
@@ -60,11 +68,10 @@ class _MapScreenState extends State<MapScreen> {
     if (_filterCategory == null || _filterCategory == 'All') return _reports;
     return _reports
         .where((r) =>
-            r.category.toLowerCase() == _filterCategory!.toLowerCase())
+            r.type.toLowerCase() == _filterCategory!.toLowerCase())
         .toList();
   }
 
-  // ── Open detail bottom sheet ──────────────────────────────────────────────
   void _showDetail(ReportModel report) {
     showModalBottomSheet(
       context: context,
@@ -98,7 +105,6 @@ class _MapScreenState extends State<MapScreen> {
                       'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.joshua.resqapp',
                 ),
-                // ── Report markers ──
                 MarkerLayer(
                   markers: filtered.map((report) {
                     return Marker(
@@ -123,7 +129,6 @@ class _MapScreenState extends State<MapScreen> {
             right: 16,
             child: Column(
               children: [
-                // Live badge row
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 10),
@@ -170,7 +175,6 @@ class _MapScreenState extends State<MapScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      // Report count badge
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
@@ -190,7 +194,6 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      // Refresh button
                       GestureDetector(
                         onTap: _fetchReports,
                         child: const Icon(Icons.refresh,
@@ -309,10 +312,10 @@ class _MapScreenState extends State<MapScreen> {
                 ),
                 child: Column(
                   children: [
-                    // Drag handle
                     Center(
                       child: Container(
-                        margin: const EdgeInsets.only(top: 12, bottom: 16),
+                        margin:
+                            const EdgeInsets.only(top: 12, bottom: 16),
                         width: 40,
                         height: 4,
                         decoration: BoxDecoration(
@@ -321,7 +324,6 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                     ),
-                    // Header
                     Padding(
                       padding:
                           const EdgeInsets.symmetric(horizontal: 20),
@@ -349,7 +351,8 @@ class _MapScreenState extends State<MapScreen> {
                             GestureDetector(
                               onTap: _fetchReports,
                               child: const Icon(Icons.refresh,
-                                  size: 20, color: Color(0xFFF5A623)),
+                                  size: 20,
+                                  color: Color(0xFFF5A623)),
                             ),
                         ],
                       ),
@@ -376,7 +379,6 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // List
                     Expanded(
                       child: _isLoading
                           ? const Center(
@@ -403,7 +405,6 @@ class _MapScreenState extends State<MapScreen> {
                                         report: filtered[i],
                                         onTap: () {
                                           _showDetail(filtered[i]);
-                                          // Fly map to the tapped report
                                           _mapController.move(
                                             filtered[i].latLng,
                                             15,
@@ -437,12 +438,13 @@ class _ReportMarker extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: report.categoryColor, width: 2),
       ),
-      child: Icon(report.categoryIcon, color: report.categoryColor, size: 20),
+      child: Icon(report.categoryIcon,
+          color: report.categoryColor, size: 20),
     );
   }
 }
 
-// ── Report Card (in bottom sheet list) ───────────────────────────────────────
+// ── Report Card ───────────────────────────────────────────────────────────────
 
 class _ReportCard extends StatelessWidget {
   final ReportModel report;
@@ -470,7 +472,6 @@ class _ReportCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Color bar
             Container(
               width: 3,
               height: 48,
@@ -480,7 +481,6 @@ class _ReportCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            // Category icon
             Container(
               width: 38,
               height: 38,
@@ -492,7 +492,6 @@ class _ReportCard extends StatelessWidget {
                   color: report.categoryColor, size: 18),
             ),
             const SizedBox(width: 10),
-            // Text
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,7 +499,7 @@ class _ReportCard extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        report.category,
+                        report.type,
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -513,10 +512,10 @@ class _ReportCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    report.address.isNotEmpty
-                        ? report.address
-                        : '${report.latitude.toStringAsFixed(4)}, '
-                            '${report.longitude.toStringAsFixed(4)}',
+                    report.location.isNotEmpty
+                        ? report.location
+                        : '${report.lat.toStringAsFixed(4)}, '
+                            '${report.lng.toStringAsFixed(4)}',
                     style: const TextStyle(
                         fontSize: 12, color: Colors.black45),
                     maxLines: 1,
@@ -536,11 +535,10 @@ class _ReportCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // Time
             Text(
               report.timeAgo,
-              style:
-                  const TextStyle(fontSize: 11, color: Colors.black38),
+              style: const TextStyle(
+                  fontSize: 11, color: Colors.black38),
             ),
           ],
         ),
@@ -549,7 +547,7 @@ class _ReportCard extends StatelessWidget {
   }
 }
 
-// ── Report Detail Bottom Sheet ────────────────────────────────────────────────
+// ── Report Detail Sheet ───────────────────────────────────────────────────────
 
 class _ReportDetailSheet extends StatelessWidget {
   final ReportModel report;
@@ -566,16 +564,17 @@ class _ReportDetailSheet extends StatelessWidget {
         return Container(
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius:
+                BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: ListView(
             controller: scrollController,
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
             children: [
-              // Handle
               Center(
                 child: Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 20),
+                  margin:
+                      const EdgeInsets.only(top: 12, bottom: 20),
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
@@ -584,7 +583,7 @@ class _ReportDetailSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              // Header row
+              // Header
               Row(
                 children: [
                   Container(
@@ -603,7 +602,9 @@ class _ReportDetailSheet extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          report.category,
+                          report.title.isNotEmpty
+                              ? report.title
+                              : report.type,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -624,7 +625,8 @@ class _ReportDetailSheet extends StatelessWidget {
               const SizedBox(height: 20),
 
               // Image
-              if (report.imageUrl != null && report.imageUrl!.isNotEmpty) ...[
+              if (report.imageUrl != null &&
+                  report.imageUrl!.isNotEmpty) ...[
                 ClipRRect(
                   borderRadius: BorderRadius.circular(14),
                   child: Image.network(
@@ -643,19 +645,6 @@ class _ReportDetailSheet extends StatelessWidget {
                             color: Colors.black26, size: 40),
                       ),
                     ),
-                    loadingBuilder: (_, child, progress) => progress == null
-                        ? child
-                        : Container(
-                            height: 180,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF5F0EB),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Center(
-                              child: CircularProgressIndicator(
-                                  color: Color(0xFFF5A623)),
-                            ),
-                          ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -675,12 +664,44 @@ class _ReportDetailSheet extends StatelessWidget {
               _DetailRow(
                 icon: Icons.location_on_outlined,
                 label: 'Location',
-                value: report.address.isNotEmpty
-                    ? report.address
-                    : '${report.latitude.toStringAsFixed(5)}, '
-                        '${report.longitude.toStringAsFixed(5)}',
+                value: report.location.isNotEmpty
+                    ? report.location
+                    : '${report.lat.toStringAsFixed(5)}, '
+                        '${report.lng.toStringAsFixed(5)}',
               ),
               const SizedBox(height: 12),
+
+              // Reporter
+              if (report.reporter.isNotEmpty &&
+                  report.reporter != 'Anonymous') ...[
+                _DetailRow(
+                  icon: Icons.person_outline,
+                  label: 'Reporter',
+                  value: report.reporter,
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Assigned to
+              if (report.assignedTo.isNotEmpty &&
+                  report.assignedTo != 'Unassigned') ...[
+                _DetailRow(
+                  icon: Icons.local_police_outlined,
+                  label: 'Assigned Unit',
+                  value: report.assignedTo,
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // ETA
+              if (report.etaMinutes > 0) ...[
+                _DetailRow(
+                  icon: Icons.timer_outlined,
+                  label: 'ETA',
+                  value: '${report.etaMinutes} minutes',
+                ),
+                const SizedBox(height: 12),
+              ],
 
               // Status
               _DetailRow(
@@ -689,9 +710,9 @@ class _ReportDetailSheet extends StatelessWidget {
                 value: report.status.toUpperCase(),
                 valueColor: report.status.toLowerCase() == 'resolved'
                     ? Colors.green
-                    : report.status.toLowerCase() == 'pending'
-                        ? const Color(0xFFF5A623)
-                        : Colors.black87,
+                    : report.status.toLowerCase() == 'received'
+                        ? const Color(0xFF1565C0)
+                        : const Color(0xFFF5A623),
               ),
               const SizedBox(height: 12),
 
@@ -789,7 +810,7 @@ class _SeverityBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        report.severity,
+        report.priority.toUpperCase(),
         style: TextStyle(
           fontSize: large ? 12 : 10,
           fontWeight: FontWeight.w700,
@@ -852,7 +873,8 @@ class _ErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+      padding:
+          const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF5F5),
         borderRadius: BorderRadius.circular(14),
@@ -890,7 +912,8 @@ class _ErrorState extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: onRetry,
-            icon: const Icon(Icons.refresh, color: Colors.white, size: 16),
+            icon: const Icon(Icons.refresh,
+                color: Colors.white, size: 16),
             label: const Text('Retry',
                 style: TextStyle(color: Colors.white)),
           ),
