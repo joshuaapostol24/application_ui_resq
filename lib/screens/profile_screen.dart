@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import 'otp_screen.dart';
 import 'report_history_screen.dart';
+import '../services/storage_service.dart';
+import 'dart:io';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -124,16 +127,43 @@ class _LoginFormState extends State<_LoginForm> {
     password: _passwordController.text,
   );
 
+  if (!mounted) return;
   setState(() => _isLoading = false);
 
   if (!result['success'] && mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result['message']),
-        backgroundColor: Colors.red,
+
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
       ),
-    );
-  }
+
+      title: const Text(
+        'Login Failed',
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+
+      content: Text(result['message']),
+
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+
+          child: const Text(
+            'OK',
+            style: TextStyle(
+              color: Color(0xFFF5A623),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
 }
 
   void _continueAsGuest() {
@@ -387,6 +417,39 @@ class _SignUpFormState extends State<_SignUpForm> {
   bool _obscureConfirm = true;
   bool _isLoading = false;
 
+  final _idNumberController = TextEditingController();
+
+  String _selectedIdType = 'National ID';
+
+  final List<String> _idTypes = [
+    'National ID',
+    'Driver License',
+    'Passport',
+    'UMID',
+    'SSS ID',
+    'PhilHealth ID',
+    'Postal ID',
+    'Student ID',
+    'Barangay ID',
+  ];
+
+  File? _selectedIdImage;
+
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickIdImage() async {
+  final XFile? image = await _picker.pickImage(
+    source: ImageSource.gallery,
+    imageQuality: 70,
+  );
+
+  if (image != null) {
+    setState(() {
+      _selectedIdImage = File(image.path);
+    });
+  }
+}
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -395,12 +458,19 @@ class _SignUpFormState extends State<_SignUpForm> {
     _mobileController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _idNumberController.dispose();
     super.dispose();
   }
 
+  String? idImageUrl;
+
   void _handleSignUp() async {
   if (!_formKey.currentState!.validate()) return;
-
+  if (_selectedIdImage != null) {
+  idImageUrl = await StorageService.uploadIdImage(
+    _selectedIdImage!,
+  );
+}
   setState(() => _isLoading = true);
 
   final result = await AuthService().signUp(
@@ -408,6 +478,11 @@ class _SignUpFormState extends State<_SignUpForm> {
     address: _addressController.text.trim(),
     email: _emailController.text.trim(),
     mobileNumber: _mobileController.text.trim(),
+
+    idType: _selectedIdType,
+    idNumber: _idNumberController.text.trim(),
+    idImageUrl: idImageUrl,
+
     password: _passwordController.text,
   );
 
@@ -513,6 +588,116 @@ class _SignUpFormState extends State<_SignUpForm> {
               },
             ),
             const SizedBox(height: 16),
+            // ID Type
+            _FormLabel(label: 'Valid ID Type'),
+            const SizedBox(height: 6),
+
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFE8E0D8),
+                ),
+              ),
+
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedIdType,
+                  isExpanded: true,
+
+                  items: _idTypes.map((type) {
+                    return DropdownMenuItem(
+                      value: type,
+                      child: Text(type),
+                    );
+                  }).toList(),
+
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedIdType = value;
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ID Number
+            _FormLabel(label: 'ID Number'),
+            const SizedBox(height: 6),
+
+            _ResQTextField(
+              controller: _idNumberController,
+              hint: 'Enter ID number',
+
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) {
+                  return 'ID number is required';
+                }
+
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 16),
+
+          // Upload ID
+          _FormLabel(label: 'Upload Valid ID'),
+          const SizedBox(height: 6),
+
+          GestureDetector(
+            onTap: _pickIdImage,
+
+            child: Container(
+              height: 140,
+              width: double.infinity,
+
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFE8E0D8),
+                ),
+              ),
+
+              child: _selectedIdImage != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+
+                    child: Image.file(
+                      _selectedIdImage!,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+
+                : const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.upload_file_outlined,
+                      size: 34,
+                      color: Color(0xFFF5A623),
+                    ),
+
+                    SizedBox(height: 8),
+
+                    Text(
+                      'Tap to upload ID',
+                      style: TextStyle(
+                        color: Colors.black45,
+                      ),
+                    ),
+                  ],
+                ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
 
             // Password
             _FormLabel(label: 'Password'),

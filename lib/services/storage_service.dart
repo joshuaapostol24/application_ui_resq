@@ -5,6 +5,25 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class StorageService {
   static final _supabase = Supabase.instance.client;
 
+  static Future<String> uploadIdImage(File imageFile) async {
+  try {
+    final fileName =
+        'id_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+    await _supabase.storage
+        .from('valid-ids')
+        .upload(fileName, imageFile);
+
+    final imageUrl = _supabase.storage
+        .from('valid-ids')
+        .getPublicUrl(fileName);
+
+    return imageUrl;
+  } catch (e) {
+    throw Exception('ID upload failed: $e');
+  }
+}
+
   static Future<String?> uploadReportImage(File imageFile) async {
     try {
       // ── Validate file exists and has content ──────────────────────────────

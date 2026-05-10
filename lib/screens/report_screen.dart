@@ -171,7 +171,7 @@ class _ReportScreenState extends State<ReportScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF5F0EB),
         elevation: 0,
-        leading: const BackButton(color: Colors.black87),
+        automaticallyImplyLeading: false,
         title: const Text(
           'Report',
           style: TextStyle(
@@ -181,12 +181,6 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_horiz, color: Colors.black87),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

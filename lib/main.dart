@@ -22,7 +22,7 @@ Future<void> main() async {
   runApp(const ResQApp());
 }
 
-// Helper to access Supabase client anywhere in the app
+// Helper to access Supabase client anywhere in the app 
 //final supabase = Supabase.instance.client;
 
 class ResQApp extends StatelessWidget {

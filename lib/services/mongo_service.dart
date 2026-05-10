@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/report_model.dart';
 
 class MongoService {
-  static const String _baseUrl = 'https://resq-system.onrender.com';
+  static const String _baseUrl = 'https://resq-app-xsb98.ondigitalocean.app';
 
   // ── Auth header ───────────────────────────────────────────────────────────
   static Future<Map<String, String>> _headers() async {

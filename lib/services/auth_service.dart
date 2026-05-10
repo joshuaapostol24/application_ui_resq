@@ -7,6 +7,7 @@ class UserModel {
   final String address;
   final String email;
   final String mobileNumber;
+  final String approvalStatus; 
 
   UserModel({
     required this.id,
@@ -14,6 +15,7 @@ class UserModel {
     required this.address,
     required this.email,
     required this.mobileNumber,
+    required this.approvalStatus,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class UserModel {
       address: json['address'] ?? '',
       email: json['email'] ?? '',
       mobileNumber: json['mobile_number'] ?? '',
+      approvalStatus: json['status'] ?? 'pending',
     );
   }
 }
@@ -63,10 +66,10 @@ class AuthService extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   // ── Load profile from Supabase 'profiles' table ──────────────────────────
-  Future<void> _loadUserProfile() async { 
-    try {
-      _isLoading = true;
-      notifyListeners();
+  Future<void> _loadUserProfile() async {
+  try {
+    _isLoading = true;
+    notifyListeners();
 
     final userId = _supabase.auth.currentSession?.user.id;
 
@@ -82,13 +85,25 @@ class AuthService extends ChangeNotifier {
         .eq('id', userId)
         .maybeSingle();
 
-    if (data != null) {
-      _currentUser = UserModel.fromJson(data);
+    // NO PROFILE FOUND
+    if (data == null) {
+      await _supabase.auth.signOut();
+
+      _currentUser = null;
+
+      _isLoading = false;
+      notifyListeners();
+      return;
     }
 
+    // APPROVED USER
+    _currentUser = UserModel.fromJson(data);
+
     _isGuest = false;
+
   } catch (e) {
     debugPrint('Error loading profile: $e');
+
   } finally {
     _isLoading = false;
     notifyListeners();
@@ -101,7 +116,10 @@ class AuthService extends ChangeNotifier {
     required String address,
     required String email,
     required String mobileNumber,
+    required String idType,
+    required String idNumber,
     required String password,
+    String? idImageUrl,
   }) async {
     try {
       _isLoading = true;
@@ -129,7 +147,16 @@ class AuthService extends ChangeNotifier {
         'address': address,
         'email': email,
         'mobile_number': mobileNumber,
+        'id_type': idType,
+        'id_number': idNumber,
+        'id_image_url': idImageUrl,
+        'status': 'pending',
       });
+
+      //Sign out immediately
+      await _supabase.auth.signOut();
+
+      
 
       _currentUser = UserModel(
         id: response.user!.id,
@@ -137,11 +164,12 @@ class AuthService extends ChangeNotifier {
         address: address,
         email: email,
         mobileNumber: mobileNumber,
+        approvalStatus: 'pending',
       );
 
       return {
         'success': true,
-        'message': 'Account created! Please verify your email.'
+        'message': 'Account created! Awaiting admin approval.'
       };
     } on AuthException catch (e) {
       return {'success': false, 'message': e.message};
@@ -155,29 +183,70 @@ class AuthService extends ChangeNotifier {
 
   // ── Login with Email ──────────────────────────────────────────────────────
   Future<Map<String, dynamic>> login({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
+  required String email,
+  required String password,
+}) async {
+  try {
+    _isLoading = true;
+    notifyListeners();
 
-      await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+    final response = await _supabase.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
 
-      // _loadUserProfile() is triggered automatically by onAuthStateChange
-      return {'success': true};
-    } on AuthException catch (e) {
-      return {'success': false, 'message': e.message};
-    } catch (e) {
-      return {'success': false, 'message': 'Something went wrong.'};
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+    final userId = response.user?.id;
+
+    if (userId == null) {
+      return {
+        'success': false,
+        'message': 'Login failed.',
+      };
     }
+
+    final profile = await _supabase
+        .from('users')
+        .select()
+        .eq('id', userId)
+        .single();
+
+    // BLOCK PENDING USERS
+    if (profile['status'] != 'approved') {
+
+      // IMPORTANT:
+      // clear local session WITHOUT triggering UI race
+      _currentUser = null;
+
+      await _supabase.auth.signOut();
+
+      return {
+        'success': false,
+        'message':
+            'Your account is still pending admin approval.',
+      };
+    }
+
+    _currentUser = UserModel.fromJson(profile);
+
+    return {'success': true};
+
+  } on AuthException catch (e) {
+    return {
+      'success': false,
+      'message': e.message,
+    };
+
+  } catch (e) {
+    return {
+      'success': false,
+      'message': 'Something went wrong.',
+    };
+
+  } finally {
+    _isLoading = false;
+    notifyListeners();
   }
+}
 
   // ── Email OTP — Step 1: Send OTP ─────────────────────────────────────────
 Future<Map<String, dynamic>> sendEmailOtp({required String email}) async {
