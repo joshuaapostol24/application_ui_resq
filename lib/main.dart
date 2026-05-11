@@ -6,9 +6,13 @@ import 'screens/map_screen.dart';
 import 'screens/news_screen.dart';
 import 'screens/profile_screen.dart';
 import 'services/auth_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+    await Firebase.initializeApp();
 
     await Supabase.initialize(
       url: 'https://jpovamcznyzoemcnjrgs.supabase.co',       // from Supabase dashboard
@@ -52,6 +56,26 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int currentIndex = 0;
   final AuthService _authService = AuthService();
+
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Check if app was opened from a notification
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = NotificationService.pendingNavigation;
+      if (nav == 'news') {
+        setState(() => currentIndex = 3); // News tab index
+        NotificationService.pendingNavigation = null;
+      } else if (nav == 'report') {
+        setState(() => currentIndex = 2); // Map tab index
+        NotificationService.pendingNavigation = null;
+      }
+    });
+  }
+
+
 
   @override
   Widget build(BuildContext context) {

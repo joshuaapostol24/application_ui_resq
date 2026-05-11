@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'notification_service.dart';
 
 class UserModel {
   final String id;
@@ -100,6 +101,9 @@ class AuthService extends ChangeNotifier {
     _currentUser = UserModel.fromJson(data);
 
     _isGuest = false;
+    debugPrint('🔔 About to call NotificationService.initialize()');
+    await NotificationService().initialize();
+    debugPrint('🔔 NotificationService.initialize() completed');
 
   } catch (e) {
     debugPrint('Error loading profile: $e');
@@ -228,6 +232,8 @@ class AuthService extends ChangeNotifier {
 
     _currentUser = UserModel.fromJson(profile);
 
+    await NotificationService().saveToken();
+
     return {'success': true};
 
   } on AuthException catch (e) {
@@ -342,7 +348,14 @@ Future<Map<String, dynamic>> verifyEmailOtp({
 
   // ── Logout ────────────────────────────────────────────────────────────────
   Future<void> logout() async {
-    await _supabase.auth.signOut();
-    // onAuthStateChange listener handles the rest
+  // Wrap in try-catch so a notification error never blocks logout
+  try {
+    await NotificationService().clearTokenOnLogout();
+  } catch (e) {
+    debugPrint('clearTokenOnLogout error (non-fatal): $e');
   }
+  
+  // This must always run regardless
+  await _supabase.auth.signOut();
+}
 }
