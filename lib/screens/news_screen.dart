@@ -24,42 +24,56 @@ class _NewsScreenState extends State<NewsScreen> {
   }
 
   Future<void> _fetchNews() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  setState(() {
+    _isLoading = true;
+    _error = null;
+  });
 
-    try {
-      // Uses the same collection the admin dashboard reads from.
-      // Field names match exactly: title, message, category, priority,
-      // date, audience, pinned.
-      final response = await http
-          .get(Uri.parse('$_baseUrl/api/news/public'))
-          .timeout(const Duration(seconds: 15));
+  try {
+    final response = await http
+        .get(Uri.parse('$_baseUrl/api/news/all'))
+        .timeout(const Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
 
-        // Backend returns a List directly (same as /api/news/all)
-        final List<dynamic> raw = decoded is List ? decoded : [];
-
-        setState(() {
-          _news = raw.cast<Map<String, dynamic>>();
-          _isLoading = false;
-        });
+      List<dynamic> rawList;
+      if (decoded is List) {
+        rawList = decoded;
+      } else if (decoded is Map && decoded['data'] is List) {
+        rawList = decoded['data'];
+      } else if (decoded is Map && decoded['announcements'] is List) {
+        rawList = decoded['announcements'];
       } else {
-        setState(() {
-          _error = 'Server error ${response.statusCode}.';
-          _isLoading = false;
-        });
+        rawList = [];
+        debugPrint('Unexpected shape: ${decoded.runtimeType} → $decoded');
       }
-    } catch (e) {
+
+      final sorted = rawList
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+
+      sorted.sort((a, b) => _parseItemDate(b).compareTo(_parseItemDate(a)));
+
       setState(() {
-        _error = 'Could not connect to the server.';
+        _news = sorted;
+        _isLoading = false;
+      });
+
+    } else {
+      setState(() {
+        _error = 'Server error ${response.statusCode}.';
         _isLoading = false;
       });
     }
+  } catch (e) {
+    setState(() {
+      _error = 'Could not connect to the server.';
+      _isLoading = false;
+    });
   }
+}
 
   // ── Pinned item (shown at the top if present) ─────────────────────────────
   Map<String, dynamic>? get _pinned {
@@ -120,16 +134,30 @@ class _NewsScreenState extends State<NewsScreen> {
   }
 
   // ── Date formatter ────────────────────────────────────────────────────────
-  String _formatDate(dynamic raw) {
-    if (raw == null || raw.toString().isEmpty) return '';
-    try {
-      final dt = DateTime.parse(raw.toString()).toLocal();
-      return '${dt.day}/${dt.month}/${dt.year}  '
-          '${dt.hour.toString().padLeft(2, '0')}:'
-          '${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return raw.toString();
-    }
+  // AFTER
+  // AFTER
+String _formatDate(dynamic raw) {
+  if (raw == null || raw.toString().isEmpty) return 'No date';
+  try {
+    final dt = DateTime.parse(raw.toString()).toLocal();
+    final months = [
+      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final hour = dt.hour > 12 ? dt.hour - 12 : dt.hour == 0 ? 12 : dt.hour;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    return '${months[dt.month]} ${dt.day}, ${dt.year}  $hour:$minute $ampm';
+  } catch (_) {
+    return raw.toString();
+  }
+}
+
+    DateTime _parseItemDate(Map<String, dynamic> item) {
+    // mirrors admin JS: createdAt || date
+    final raw = item['createdAt'] ?? item['date'];
+    if (raw == null || raw.toString().isEmpty) return DateTime(0);
+    return DateTime.tryParse(raw.toString()) ?? DateTime(0);
   }
 
   @override

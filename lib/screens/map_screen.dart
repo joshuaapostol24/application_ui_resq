@@ -11,6 +11,17 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
+String _formatDate(DateTime dt) {
+  const months = [
+    '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  final hour = dt.hour > 12 ? dt.hour - 12 : dt.hour == 0 ? 12 : dt.hour;
+  final minute = dt.minute.toString().padLeft(2, '0');
+  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+  return '${months[dt.month]} ${dt.day}, ${dt.year}  $hour:$minute $ampm';
+}
+
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   final _supabase = Supabase.instance.client;
@@ -29,6 +40,7 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
     _fetchReports();
   }
+  
 
   // ── Fetch from Supabase (same source as admin dashboard) ──────────────────
   Future<void> _fetchReports() async {
@@ -38,9 +50,10 @@ class _MapScreenState extends State<MapScreen> {
     });
     try {
       final response = await _supabase
-          .from('reports')
-          .select('*')
-          .order('created_at', ascending: false);
+      .from('reports')
+      .select('*')
+      .eq('status', 'approved')
+      .order('created_at', ascending: false);
 
       final List<ReportModel> parsed = (response as List)
           .map((row) => ReportModel.fromJson(row as Map<String, dynamic>))
@@ -80,6 +93,7 @@ class _MapScreenState extends State<MapScreen> {
       builder: (_) => _ReportDetailSheet(report: report),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -535,10 +549,21 @@ class _ReportCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              report.timeAgo,
-              style: const TextStyle(
-                  fontSize: 11, color: Colors.black38),
+            // AFTER
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  report.timeAgo,
+                  style: const TextStyle(
+                    fontSize: 11, color: Colors.black38),
+                  ),
+                  Text(
+                    _formatDate(report.createdAt),
+                    style: const TextStyle(
+                      fontSize: 10, color: Colors.black26),
+                  ),
+              ],
             ),
           ],
         ),
@@ -717,13 +742,21 @@ class _ReportDetailSheet extends StatelessWidget {
               const SizedBox(height: 12),
 
               // Timestamp
+              // AFTER
               _DetailRow(
                 icon: Icons.access_time_outlined,
                 label: 'Reported',
-                value:
-                    '${report.createdAt.day}/${report.createdAt.month}/${report.createdAt.year} '
-                    '${report.createdAt.hour.toString().padLeft(2, '0')}:'
-                    '${report.createdAt.minute.toString().padLeft(2, '0')}',
+                value: () {
+                  const months = [
+                    '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+                  ];
+                  final dt = report.createdAt;
+                  final hour = dt.hour > 12 ? dt.hour - 12 : dt.hour == 0 ? 12 : dt.hour;
+                  final minute = dt.minute.toString().padLeft(2, '0');
+                  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+                  return '${months[dt.month]} ${dt.day}, ${dt.year}  $hour:$minute $ampm';
+                }(),
               ),
             ],
           ),
@@ -852,7 +885,7 @@ class _EmptyState extends StatelessWidget {
           ),
           SizedBox(height: 4),
           Text(
-            'Reports will appear here once submitted.',
+            'Verified reports will appear here once reviewed by officials.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: Colors.black38),
           ),
