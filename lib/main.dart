@@ -18,6 +18,9 @@ Future<void> main() async {
       url: 'https://jpovamcznyzoemcnjrgs.supabase.co',       // from Supabase dashboard
       anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impwb3ZhbWN6bnl6b2VtY25qcmdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4ODMwMTcsImV4cCI6MjA5MzQ1OTAxN30.1WTdf3j4F6z-attUvvPi5Z7i8Q81hB4hhQtpyrgU8ao',      // from Supabase dashboard
     );
+
+    await NotificationService().initialize();
+    
   FlutterError.onError = (FlutterErrorDetails details) {
   FlutterError.presentError(details);
   debugPrint(details.exceptionAsString());
@@ -61,6 +64,20 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+
+    NotificationService.onNotificationTap = () {
+      if (!mounted) return;
+
+      final nav =
+        NotificationService.pendingNavigation;
+
+      if (nav == 'report') {
+
+        setState(() {
+          currentIndex = 2;
+        });
+      }
+    };
 
     // Check if app was opened from a notification
     WidgetsBinding.instance.addPostFrameCallback((_) {

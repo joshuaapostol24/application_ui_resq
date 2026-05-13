@@ -49,7 +49,7 @@ class ReportModel {
   factory ReportModel.fromJson(Map<String, dynamic> json) {
     return ReportModel(
       id: (json['id'] ?? '').toString(),
-      title: (json['title'] ?? 'Untitled Report').toString(),
+      title: (json['title'] ?? '').toString(),
       type: (json['type'] ?? 'Others').toString(),
       priority: (json['priority'] ?? 'medium').toString(),
       status: (json['status'] ?? 'received').toString(),

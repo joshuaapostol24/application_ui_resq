@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/report_model.dart';
+import '../services/notification_service.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -40,6 +41,47 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
     _fetchReports();
   }
+
+  void _handleNotificationNavigation() {
+    final reportId =
+      NotificationService.pendingReportId;
+
+    if (reportId == null) return;
+
+    try {
+
+      final report = _reports.firstWhere(
+        (r) => r.id.toString() == reportId,
+      );
+
+      // Move map to report
+      _mapController.move(
+        report.latLng,
+        16,
+      );
+
+      // Open report details
+      Future.delayed(
+        const Duration(milliseconds: 500),
+        () {
+
+          if (!mounted) return;
+
+          _showDetail(report);
+        },
+      );
+
+      // Clear pending state
+      NotificationService.pendingReportId = null;
+      NotificationService.pendingNavigation = null;
+
+    } catch (e) {
+
+      debugPrint(
+        'Report from notification not found'
+      );
+    }
+  }
   
 
   // ── Fetch from Supabase (same source as admin dashboard) ──────────────────
@@ -65,6 +107,8 @@ class _MapScreenState extends State<MapScreen> {
           _reports = parsed;
           _isLoading = false;
         });
+
+        _handleNotificationNavigation();
       }
     } catch (e) {
       if (mounted) {

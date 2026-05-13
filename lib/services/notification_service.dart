@@ -2,12 +2,15 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 // Top-level handler for background messages (required by FCM)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Firebase is already initialized by this point on isolate
-  debugPrint('Background message: ${message.messageId}');
+  await Firebase.initializeApp(); 
+  debugPrint('BACKGROUND MESSAGE RECEIVED');
+  debugPrint(message.toMap().toString());
 }
 
 class NotificationService {
@@ -20,6 +23,7 @@ class NotificationService {
 
   static String? pendingReportId;
   static String? pendingNavigation;
+  static VoidCallback? onNotificationTap;
   // Add this public method inside NotificationService class
   Future<void> saveToken() async {
     await _saveTokenToSupabase();
@@ -29,6 +33,9 @@ class NotificationService {
     // Register background handler FIRST
     debugPrint('🔔 NotificationService.initialize() called');
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    final token = await FirebaseMessaging.instance.getToken();
+
+    debugPrint('TEST TOKEN: $token');
 
     // Request permission (iOS shows dialog; Android 13+ also needs this)
     final settings = await _messaging.requestPermission(
@@ -53,6 +60,7 @@ class NotificationService {
 
     await _messaging.subscribeToTopic('resq_news');
     debugPrint('✅ Subscribed to resq_news topic');
+    await _messaging.subscribeToTopic('resq_reports');
 
     // Optional: subscribe to emergency alerts specifically
     await _messaging.subscribeToTopic('resq_emergency');
@@ -77,6 +85,22 @@ class NotificationService {
 
   // ── Local notifications setup ─────────────────────────────────────────────
   Future<void> _setupLocalNotifications() async {
+
+
+  const AndroidNotificationChannel channel =
+    AndroidNotificationChannel(
+  'resq_alerts',
+  'ResQ Emergency Alerts',
+  description: 'Critical emergency notifications from ResQ',
+  importance: Importance.max,
+  );
+
+  await _localNotifications
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  
   const androidSettings =
       AndroidInitializationSettings('@mipmap/ic_launcher');
 
@@ -91,13 +115,39 @@ class NotificationService {
       android: androidSettings,
       iOS: iosSettings,
     ),
-    onDidReceiveNotificationResponse: (details) {
-      debugPrint('Local notification tapped: ${details.payload}');
-      if (details.payload != null) {
-        NotificationService.pendingReportId = details.payload;
-      }
-    },
-  );
+    onDidReceiveNotificationResponse: (
+      details
+    ) {
+
+      debugPrint(
+        'Local notification tapped');
+
+      final payload =
+        details.payload;
+
+      if (payload == null) return;
+
+      final reportIdMatch =
+        RegExp(
+          r"report_id: ([^,}]+)"
+        ).firstMatch(payload);
+
+      if (reportIdMatch != null) {
+
+        final reportId =
+          reportIdMatch.group(1);
+
+        NotificationService.pendingReportId =
+          reportId;
+
+        NotificationService.pendingNavigation =
+          'report';
+
+        NotificationService.onNotificationTap
+            ?.call();
+        }
+      },
+    );
 
   // iOS only — show notification even when app is foregrounded
   await _messaging.setForegroundNotificationPresentationOptions(
@@ -198,14 +248,16 @@ class NotificationService {
         presentSound: true,
       ),
     ),
-    payload: message.data['report_id'],
+    payload: message.data['notification_type'] == 'news'
+      ? 'news'
+      : message.data.toString(),
   );
 }
 
   void _handleNotificationTap(RemoteMessage message) {
   debugPrint('Notification tapped: ${message.data}');
 
-  final type = message.data['type'];
+  final type = message.data['notification_type'];
 
   if (type == 'news') {
     // Navigate to news tab
