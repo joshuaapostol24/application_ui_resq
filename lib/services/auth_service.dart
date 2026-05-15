@@ -63,7 +63,9 @@ class AuthService extends ChangeNotifier {
 
   UserModel? get currentUser => _currentUser;
   bool get isGuest => _isGuest;
-  bool get isLoggedIn => _supabase.auth.currentSession != null;
+  bool get isLoggedIn =>
+    _supabase.auth.currentSession != null &&
+    _currentUser != null;
   bool get isLoading => _isLoading;
 
   // ── Load profile from Supabase 'profiles' table ──────────────────────────
@@ -97,6 +99,21 @@ class AuthService extends ChangeNotifier {
       return;
     }
 
+    final status =
+      (data['status'] ?? 'pending')
+        .toString()
+        .toLowerCase();
+
+    if (status == 'pending' ||
+      status == 'rejected') {
+
+      _currentUser = null;
+
+      _isGuest = false;
+
+      return;
+    }
+
     // APPROVED USER
     _currentUser = UserModel.fromJson(data);
 
@@ -115,144 +132,216 @@ class AuthService extends ChangeNotifier {
 }
 
   // ── Sign Up ───────────────────────────────────────────────────────────────
-  Future<Map<String, dynamic>> signUp({
-    required String name,
-    required String address,
-    required String email,
-    required String mobileNumber,
-    required String idType,
-    required String idNumber,
-    required String password,
-    String? idImageUrl,
-  }) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      // 1. Create auth account in Supabase
-      final response = await _supabase.auth.signUp(
-        email: email,
-        password: password,
-        data: {
-          'name': name,
-          'address': address,
-          'mobile_number': mobileNumber,
-        },
-      );
-
-      if (response.user == null) {
-        return {'success': false, 'message': 'Sign up failed. Try again.'};
-      }
-
-      // 2. Insert profile into the profiles table
-      await _supabase.from('users').insert({
-        'id': response.user!.id,
-        'name': name,
-        'address': address,
-        'email': email,
-        'mobile_number': mobileNumber,
-        'id_type': idType,
-        'id_number': idNumber,
-        'id_image_url': idImageUrl,
-        'status': 'pending',
-      });
-
-      //Sign out immediately
-      await _supabase.auth.signOut();
-
-      
-
-      _currentUser = UserModel(
-        id: response.user!.id,
-        name: name,
-        address: address,
-        email: email,
-        mobileNumber: mobileNumber,
-        approvalStatus: 'pending',
-      );
-
-      return {
-        'success': true,
-        'message': 'Account created! Awaiting admin approval.'
-      };
-    } on AuthException catch (e) {
-      return {'success': false, 'message': e.message};
-    } catch (e) {
-      return {'success': false, 'message': 'Something went wrong.'};
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // ── Login with Email ──────────────────────────────────────────────────────
-  Future<Map<String, dynamic>> login({
+Future<Map<String, dynamic>> signUp({
+  required String name,
+  required String address,
   required String email,
+  required String mobileNumber,
+  required String idType,
+  required String idNumber,
   required String password,
+  String? idImageUrl,
 }) async {
+
   try {
+
     _isLoading = true;
     notifyListeners();
 
-    final response = await _supabase.auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
-
-    final userId = response.user?.id;
-
-    if (userId == null) {
-      return {
-        'success': false,
-        'message': 'Login failed.',
-      };
-    }
-
-    final profile = await _supabase
+    // ─────────────────────────────────────────────
+    // CHECK IF EMAIL ALREADY EXISTS FIRST
+    // ─────────────────────────────────────────────
+    final existingUser = await _supabase
         .from('users')
-        .select()
-        .eq('id', userId)
-        .single();
+        .select('email')
+        .eq('email', email)
+        .maybeSingle();
 
-    // BLOCK PENDING USERS
-    if (profile['status'] != 'approved') {
-
-      // IMPORTANT:
-      // clear local session WITHOUT triggering UI race
-      _currentUser = null;
-
-      await _supabase.auth.signOut();
+    if (existingUser != null) {
 
       return {
         'success': false,
         'message':
-            'Your account is still pending admin approval.',
+            'An account with this email already exists.',
       };
     }
 
-    _currentUser = UserModel.fromJson(profile);
+    await _supabase.auth.signOut();
 
-    await NotificationService().saveToken();
+    // ─────────────────────────────────────────────
+    // CREATE AUTH ACCOUNT
+    // ─────────────────────────────────────────────
+    final response =
+        await _supabase.auth.signUp(
+      email: email,
+      password: password,
+      data: {
+        'name': name,
+        'address': address,
+        'mobile_number': mobileNumber,
+      },
+    );
 
-    return {'success': true};
+    if (response.user == null) {
+
+      return {
+        'success': false,
+        'message':
+            'Sign up failed. Please try again.',
+      };
+    }
+
+    // ─────────────────────────────────────────────
+    // INSERT USER PROFILE
+    // ─────────────────────────────────────────────
+    await _supabase.from('users').insert({
+      'id': response.user!.id,
+      'name': name,
+      'address': address,
+      'email': email,
+      'mobile_number': mobileNumber,
+      'id_type': idType,
+      'id_number': idNumber,
+      'id_image_url': idImageUrl,
+      'status': 'pending',
+    });
+
+    // OPTIONAL:
+    // SIGN OUT IMMEDIATELY AFTER SIGNUP
+    await _supabase.auth.signOut();
+
+    return {
+      'success': true,
+      'message':
+          'Your account has been created successfully and is now under review by the admin.',
+    };
 
   } on AuthException catch (e) {
+
+    return {
+      'success': false,
+      'message': e.message,
+    };
+
+  } on PostgrestException catch (e) {
+
     return {
       'success': false,
       'message': e.message,
     };
 
   } catch (e) {
+
+    debugPrint('SIGNUP ERROR: $e');
+
+    return {
+      'success': false,
+      'message':
+          'Something went wrong. Please try again.',
+    };
+
+  } finally {
+
+    _isLoading = false;
+    notifyListeners();
+  }
+}
+
+  // ── Login with Email ──────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> login({
+  required String email,
+  required String password,
+}) async {
+
+  try {
+
+    _isLoading = true;
+
+    // FIRST: check database BEFORE auth login
+    final existingUser = await _supabase
+        .from('users')
+        .select()
+        .eq('email', email)
+        .maybeSingle();
+
+    if (existingUser == null) {
+
+      return {
+        'success': false,
+        'message': 'Incorrect email or password. Please enter appropriate details.',
+      };
+    }
+
+    final status =
+        existingUser['status']
+            .toString()
+            .toLowerCase();
+
+    // BLOCK pending users BEFORE login
+    if (status == 'pending') {
+
+      return {
+        'success': false,
+        'message':
+            'Your account is still under review by the admin.',
+      };
+    }
+
+    // BLOCK rejected users BEFORE login
+    if (status == 'rejected') {
+
+      return {
+        'success': false,
+        'message':
+            'Your account has been rejected by the admin.',
+      };
+    }
+
+    // ONLY approved users continue
+    final response =
+        await _supabase.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+
+    if (response.user == null) {
+
+      return {
+        'success': false,
+        'message': 'Incorrect email or password. Please enter appropriate details.',
+      };
+    }
+
+    _currentUser =
+        UserModel.fromJson(existingUser);
+
+    notifyListeners();
+
+    return {
+      'success': true,
+      'message': 'Login successful.',
+    };
+
+  } on AuthException {
+
+    return {
+      'success': false,
+      'message': 'Incorrect email or password. Please enter appropriate details.',
+    };
+
+  } catch (e) {
+
     return {
       'success': false,
       'message': 'Something went wrong.',
     };
 
   } finally {
+
     _isLoading = false;
-    notifyListeners();
   }
 }
+
 
   // ── Email OTP — Step 1: Send OTP ─────────────────────────────────────────
 Future<Map<String, dynamic>> sendEmailOtp({required String email}) async {
@@ -262,7 +351,7 @@ Future<Map<String, dynamic>> sendEmailOtp({required String email}) async {
 
     await _supabase.auth.signInWithOtp(
       email: email,
-      shouldCreateUser: true,  // creates account if it doesn't exist yet
+      shouldCreateUser: false,  // creates account if it doesn't exist yet
     );
 
     return {'success': true};
@@ -338,6 +427,35 @@ Future<Map<String, dynamic>> verifyEmailOtp({
       return {'success': false, 'message': 'Could not change password.'};
     }
   }
+
+  Future<Map<String, dynamic>> sendPasswordResetEmail(
+  String email,
+) async {
+  try {
+    await _supabase.auth.resetPasswordForEmail(
+      email,
+      redirectTo: 'resq://reset-password',
+    );
+
+    return {
+      'success': true,
+      'message': 'Password reset email has been sent.',
+    };
+
+  } on AuthException catch (e) {
+    return {
+      'success': false,
+      'message': e.message,
+    };
+
+  } catch (e) {
+    return {
+      'success': false,
+      'message': 'Failed to send password reset email.',
+    };
+  }
+}
+
 
   // ── Guest ─────────────────────────────────────────────────────────────────
   void loginAsGuest() {

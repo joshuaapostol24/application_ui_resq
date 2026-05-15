@@ -8,6 +8,15 @@ import 'screens/profile_screen.dart';
 import 'services/auth_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
+import 'screens/reset_password_screen.dart';
+
+
+final GlobalKey<NavigatorState> navigatorKey =
+    GlobalKey<NavigatorState>();
+  
+final GlobalKey<ScaffoldMessengerState>
+    scaffoldMessengerKey =
+        GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,18 +41,50 @@ Future<void> main() async {
 // Helper to access Supabase client anywhere in the app 
 //final supabase = Supabase.instance.client;
 
-class ResQApp extends StatelessWidget {
+class ResQApp extends StatefulWidget {
   const ResQApp({super.key});
 
   @override
+  State<ResQApp> createState() => _ResQAppState();
+}
+
+class _ResQAppState extends State<ResQApp> {
+
+  @override
+  void initState() {
+    super.initState();
+
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+
+      final event = data.event;
+
+      debugPrint('AUTH EVENT: $event');
+
+      if (event == AuthChangeEvent.passwordRecovery) {
+
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => const ResetPasswordScreen(),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+
     return MaterialApp(
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       title: 'ResQ App',
+
       theme: ThemeData(
         primarySwatch: Colors.red,
         scaffoldBackgroundColor: const Color(0xFFF5F0EB),
       ),
+
       home: const MainScreen(),
     );
   }

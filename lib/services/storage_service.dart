@@ -5,22 +5,83 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class StorageService {
   static final _supabase = Supabase.instance.client;
 
-  static Future<String> uploadIdImage(File imageFile) async {
+  static Future<String> uploadIdImage(
+    File imageFile,
+) async {
+
   try {
+
+    debugPrint(
+      'ID STORAGE: Starting upload...',
+    );
+
+    if (!await imageFile.exists()) {
+      throw Exception(
+        'Selected image does not exist.',
+      );
+    }
+
+    final fileSize =
+        await imageFile.length();
+
+    debugPrint(
+      'ID STORAGE: File size = $fileSize',
+    );
+
     final fileName =
         'id_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
+    debugPrint(
+      'ID STORAGE: Uploading to valid-ids/$fileName',
+    );
+
     await _supabase.storage
         .from('valid-ids')
-        .upload(fileName, imageFile);
+        .upload(
+          fileName,
+          imageFile,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: false,
+          ),
+        )
+        .timeout(
+          const Duration(seconds: 20),
+        );
+
+    debugPrint(
+      'ID STORAGE: Upload complete',
+    );
 
     final imageUrl = _supabase.storage
         .from('valid-ids')
         .getPublicUrl(fileName);
 
+    debugPrint(
+      'ID STORAGE URL: $imageUrl',
+    );
+
     return imageUrl;
+
+  } on StorageException catch (e) {
+
+    debugPrint(
+      'ID STORAGE ERROR: ${e.message}',
+    );
+
+    throw Exception(
+      'ID upload failed: ${e.message}',
+    );
+
   } catch (e) {
-    throw Exception('ID upload failed: $e');
+
+    debugPrint(
+      'ID STORAGE GENERAL ERROR: $e',
+    );
+
+    throw Exception(
+      'ID upload failed: $e',
+    );
   }
 }
 

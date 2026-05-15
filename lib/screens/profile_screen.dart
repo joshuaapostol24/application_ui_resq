@@ -6,6 +6,8 @@ import 'otp_screen.dart';
 import 'report_history_screen.dart';
 import '../services/storage_service.dart';
 import 'dart:io';
+import '../main.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -116,8 +118,87 @@ class _LoginFormState extends State<_LoginForm> {
     super.dispose();
   }
 
+  Future<void> _showForgotPasswordDialog() async {
+  final emailController = TextEditingController();
+
+  await showDialog(
+  context: context,
+  builder: (ctx) => AlertDialog(
+  shape: RoundedRectangleBorder(
+  borderRadius: BorderRadius.circular(16),
+  ),
+  title: const Text(
+  'Reset Password',
+  style: TextStyle(fontWeight: FontWeight.w700),
+  ),
+  content: Column(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+  const Text(
+  'Enter your email address and we will send a password reset link.',
+  style: TextStyle(
+  color: Colors.black54,
+  fontSize: 13,
+  ),
+  ),
+  const SizedBox(height: 16),
+  TextField(
+  controller: emailController,
+  keyboardType: TextInputType.emailAddress,
+  decoration: InputDecoration(
+  hintText: 'you@email.com',
+  border: OutlineInputBorder(
+  borderRadius: BorderRadius.circular(12),
+  ),
+  ),
+  ),
+  ],
+  ),
+  actions: [
+  TextButton(
+  onPressed: () => Navigator.pop(ctx),
+  child: const Text(
+  'Cancel',
+  style: TextStyle(color: Colors.black45),
+  ),
+  ),
+  TextButton(
+  onPressed: () async {
+  final result =
+  await AuthService().sendPasswordResetEmail(
+  emailController.text.trim(),
+  );
+        if (mounted) {
+          Navigator.pop(ctx);
+
+          scaffoldMessengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Text(result['message']),
+              backgroundColor: result['success']
+                  ? const Color(0xFF4CAF50)
+                  : Colors.red,
+            ),
+          );
+        }
+      },
+      child: const Text(
+        'Send',
+        style: TextStyle(
+          color: Color(0xFFF5A623),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+  ],
+),
+);
+}
+
+
+
 
   void _handleLogin() async {
+
   if (!_formKey.currentState!.validate()) return;
 
   setState(() => _isLoading = true);
@@ -128,42 +209,25 @@ class _LoginFormState extends State<_LoginForm> {
   );
 
   if (!mounted) return;
+
   setState(() => _isLoading = false);
 
-  if (!result['success'] && mounted) {
+  if (!result['success']) {
 
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-
-      title: const Text(
-        'Login Failed',
-        style: TextStyle(
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-
-      content: Text(result['message']),
-
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-
-          child: const Text(
-            'OK',
-            style: TextStyle(
-              color: Color(0xFFF5A623),
-              fontWeight: FontWeight.w600,
-            ),
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Login Failed'),
+        content: Text(result['message']),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 }
 
   void _continueAsGuest() {
@@ -232,6 +296,20 @@ class _LoginFormState extends State<_LoginForm> {
                 return null;
               },
             ),
+            Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+            onPressed: _showForgotPasswordDialog,
+            child: const Text(
+            'Forgot Password?',
+            style: TextStyle(
+            color: Color(0xFFF5A623),
+            fontWeight: FontWeight.w600,
+            ),
+            ),
+            ),
+            ),
+
             const SizedBox(height: 28),
 
             // Sign in button
@@ -370,7 +448,7 @@ class _LoginFormState extends State<_LoginForm> {
                         ),
                       );
                     } else if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      scaffoldMessengerKey.currentState?.showSnackBar(
                         SnackBar(
                           content: Text(result['message']),
                           backgroundColor: Colors.red,
@@ -418,7 +496,7 @@ class _SignUpFormState extends State<_SignUpForm> {
   bool _isLoading = false;
 
   final _idNumberController = TextEditingController();
-
+  String? _successMessage;
   String _selectedIdType = 'National ID';
 
   final List<String> _idTypes = [
@@ -465,36 +543,120 @@ class _SignUpFormState extends State<_SignUpForm> {
   String? idImageUrl;
 
   void _handleSignUp() async {
-  if (!_formKey.currentState!.validate()) return;
-  if (_selectedIdImage != null) {
-  idImageUrl = await StorageService.uploadIdImage(
-    _selectedIdImage!,
-  );
-}
-  setState(() => _isLoading = true);
 
-  final result = await AuthService().signUp(
-    name: _nameController.text.trim(),
-    address: _addressController.text.trim(),
-    email: _emailController.text.trim(),
-    mobileNumber: _mobileController.text.trim(),
+  try {
 
-    idType: _selectedIdType,
-    idNumber: _idNumberController.text.trim(),
-    idImageUrl: idImageUrl,
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
-    password: _passwordController.text,
-  );
+    if (_selectedIdImage == null) {
 
-  setState(() => _isLoading = false);
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Valid ID Required'),
+          content: const Text(
+            'Please upload a valid ID image.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
 
-  if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final result = await AuthService().signUp(
+      name: _nameController.text.trim(),
+      address: _addressController.text.trim(),
+      email: _emailController.text.trim(),
+      mobileNumber: _mobileController.text.trim(),
+      idType: _selectedIdType,
+      idNumber: _idNumberController.text.trim(),
+      idImageUrl: null,
+      password: _passwordController.text,
+    );
+
+    // ALWAYS stop loading first
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+
+    // ───────────────── SUCCESS ─────────────────
+    if (result['success']) {
+
+      final userId =
+          Supabase.instance.client.auth.currentUser?.id;
+
+      String? uploadedImageUrl;
+
+      if (_selectedIdImage != null) {
+        uploadedImageUrl =
+            await StorageService.uploadIdImage(
+          _selectedIdImage!,
+        );
+      }
+
+      if (userId != null &&
+          uploadedImageUrl != null) {
+
+        await Supabase.instance.client
+            .from('users')
+            .update({
+              'id_image_url': uploadedImageUrl,
+            })
+            .eq('id', userId);
+      }
+
+
+      
+ 
+      await Supabase.instance.client.auth.signOut();
+
+      
+
+      // SHOW SUCCESS MESSAGE
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your account has been created successfully and is now under review by the admin.',
+          ),
+          backgroundColor: Color(0xFF4CAF50),
+          duration: Duration(seconds: 4),
+        ),
+      );
+
+      return;
+    }
+
+    // ───────────────── FAILURE ─────────────────
+    scaffoldMessengerKey.currentState?.showSnackBar(
       SnackBar(
         content: Text(result['message']),
-        backgroundColor: result['success']
-            ? const Color(0xFF4CAF50)
-            : Colors.red,
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+
+  } catch (e) {
+
+    debugPrint('SIGNUP ERROR: $e');
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(e.toString()),
+        backgroundColor: Colors.red,
       ),
     );
   }
@@ -985,7 +1147,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
 
     if (mounted) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
           content: Text(result['success']
             ? 'Password changed successfully'
