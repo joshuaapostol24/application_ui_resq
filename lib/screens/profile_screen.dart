@@ -496,7 +496,7 @@ class _SignUpFormState extends State<_SignUpForm> {
   bool _isLoading = false;
 
   final _idNumberController = TextEditingController();
-  String? _successMessage;
+
   String _selectedIdType = 'National ID';
 
   final List<String> _idTypes = [
@@ -543,22 +543,15 @@ class _SignUpFormState extends State<_SignUpForm> {
   String? idImageUrl;
 
   void _handleSignUp() async {
-
   try {
-
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     if (_selectedIdImage == null) {
-
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Valid ID Required'),
-          content: const Text(
-            'Please upload a valid ID image.',
-          ),
+          content: const Text('Please upload a valid ID image.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -567,12 +560,29 @@ class _SignUpFormState extends State<_SignUpForm> {
           ],
         ),
       );
-
       return;
     }
 
     setState(() => _isLoading = true);
 
+    // ── Step 1: Upload ID image FIRST, before signUp() signs the user out ──
+    String? uploadedImageUrl;
+    try {
+      uploadedImageUrl = await StorageService.uploadIdImage(_selectedIdImage!);
+      debugPrint('ID image uploaded: $uploadedImageUrl');
+    } catch (uploadError) {
+      if (mounted) setState(() => _isLoading = false);
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('ID image upload failed: $uploadError'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
+    // ── Step 2: Sign up, passing the image URL directly ──
     final result = await AuthService().signUp(
       name: _nameController.text.trim(),
       address: _addressController.text.trim(),
@@ -580,49 +590,13 @@ class _SignUpFormState extends State<_SignUpForm> {
       mobileNumber: _mobileController.text.trim(),
       idType: _selectedIdType,
       idNumber: _idNumberController.text.trim(),
-      idImageUrl: null,
+      idImageUrl: uploadedImageUrl,   // ← pass it here, not in a separate update
       password: _passwordController.text,
     );
 
-    // ALWAYS stop loading first
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
+    if (mounted) setState(() => _isLoading = false);
 
-    // ───────────────── SUCCESS ─────────────────
     if (result['success']) {
-
-      final userId =
-          Supabase.instance.client.auth.currentUser?.id;
-
-      String? uploadedImageUrl;
-
-      if (_selectedIdImage != null) {
-        uploadedImageUrl =
-            await StorageService.uploadIdImage(
-          _selectedIdImage!,
-        );
-      }
-
-      if (userId != null &&
-          uploadedImageUrl != null) {
-
-        await Supabase.instance.client
-            .from('users')
-            .update({
-              'id_image_url': uploadedImageUrl,
-            })
-            .eq('id', userId);
-      }
-
-
-      
- 
-      await Supabase.instance.client.auth.signOut();
-
-      
-
-      // SHOW SUCCESS MESSAGE
       scaffoldMessengerKey.currentState?.showSnackBar(
         const SnackBar(
           content: Text(
@@ -632,27 +606,18 @@ class _SignUpFormState extends State<_SignUpForm> {
           duration: Duration(seconds: 4),
         ),
       );
-
-      return;
+    } else {
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text(result['message']),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
-
-    // ───────────────── FAILURE ─────────────────
-    scaffoldMessengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(result['message']),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 4),
-      ),
-    );
-
   } catch (e) {
-
     debugPrint('SIGNUP ERROR: $e');
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
-
+    if (mounted) setState(() => _isLoading = false);
     scaffoldMessengerKey.currentState?.showSnackBar(
       SnackBar(
         content: Text(e.toString()),
