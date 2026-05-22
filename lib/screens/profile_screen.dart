@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
-import 'otp_screen.dart';
 import 'report_history_screen.dart';
 import '../services/storage_service.dart';
 import 'dart:io';
@@ -374,98 +373,6 @@ class _LoginFormState extends State<_LoginForm> {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Switch to sign up
-            Center(
-              child: GestureDetector(
-                onTap: () async {
-                  // Ask for email address instead of phone number
-                  final emailController = TextEditingController();
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                      title: const Text('Login with Email OTP',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Enter your email and we\'ll send you a 6-digit code.',
-                            style: TextStyle(
-                              fontSize: 13, color: Colors.black45),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: InputDecoration(
-                              hintText: 'you@email.com',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide:
-                                  const BorderSide(color: Color(0xFFE8E0D8)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFFF5A623), width: 1.5),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel',
-                            style: TextStyle(color: Colors.black45)),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Send OTP',
-                            style: TextStyle(
-                              color: Color(0xFFF5A623),
-                              fontWeight: FontWeight.w600)),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirmed == true && emailController.text.isNotEmpty) {
-                    final result = await AuthService()
-                      .sendEmailOtp(email: emailController.text.trim());
-                    if (result['success'] && context.mounted) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                            OtpScreen(email: emailController.text.trim()),
-                        ),
-                      );
-                    } else if (context.mounted) {
-                      scaffoldMessengerKey.currentState?.showSnackBar(
-                        SnackBar(
-                          content: Text(result['message']),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-                child: const Text(
-                  'Login with Email OTP instead',   // updated label
-                  style: TextStyle(
-                    color: Color(0xFFF5A623),
-                    fontWeight: FontWeight.w500,
-                    fontSize: 13),
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -1093,6 +1000,8 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   bool _obscureCurrent = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -1103,26 +1012,35 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   }
 
   // Inside _ChangePasswordSheetState, replace _handleSave with:
-  void _handleSave() async {
-    if (!_formKey.currentState!.validate()) return;
+ void _handleSave() async {
+  if (!_formKey.currentState!.validate()) return;
 
-    final result = await AuthService().changePassword(
-      newPassword: _newController.text,
+  setState(() {
+    _isLoading = true;
+    _errorMessage = null;
+  });
+
+  final result = await AuthService().changePassword(
+    currentPassword: _currentController.text,
+    newPassword: _newController.text,
+  );
+
+  if (!mounted) return;
+
+  if (result['success']) {
+    Navigator.pop(context);
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(
+        content: Text('Password changed successfully'),
+        backgroundColor: Color(0xFF4CAF50),
+      ),
     );
-
-    if (mounted) {
-      Navigator.pop(context);
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text(result['success']
-            ? 'Password changed successfully'
-            : result['message']),
-          backgroundColor: result['success']
-            ? const Color(0xFF4CAF50)
-            : Colors.red,
-        ),
-      );
-    }
+  } else {
+    setState(() {
+      _isLoading = false;
+      _errorMessage = result['message'];
+    });
+  }
 }
 
   @override
@@ -1234,6 +1152,23 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                 },
               ),
               const SizedBox(height: 24),
+
+              if (_errorMessage != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
               SizedBox(
                 width: double.infinity,

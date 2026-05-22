@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'screens/report_screen.dart';
 import 'screens/hotline_screen.dart';
 import 'screens/map_screen.dart';
@@ -10,36 +11,36 @@ import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
 import 'screens/reset_password_screen.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-final GlobalKey<NavigatorState> navigatorKey =
-    GlobalKey<NavigatorState>();
-  
-final GlobalKey<ScaffoldMessengerState>
-    scaffoldMessengerKey =
-        GlobalKey<ScaffoldMessengerState>();
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-    await Firebase.initializeApp();
+  // Load environment variables before anything else
+  await dotenv.load(fileName: '.env');
 
-    await Supabase.initialize(
-      url: 'https://jpovamcznyzoemcnjrgs.supabase.co',       // from Supabase dashboard
-      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impwb3ZhbWN6bnl6b2VtY25qcmdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4ODMwMTcsImV4cCI6MjA5MzQ1OTAxN30.1WTdf3j4F6z-attUvvPi5Z7i8Q81hB4hhQtpyrgU8ao',      // from Supabase dashboard
-    );
+  await Firebase.initializeApp();
 
-    await NotificationService().initialize();
-    
+  await Supabase.initialize(
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+  );
+
+  // NotificationService is initialized after login inside AuthService.
+  // We do NOT call it here to avoid registering listeners before a user
+  // session exists, which would cause duplicate listener registrations.
+
   FlutterError.onError = (FlutterErrorDetails details) {
-  FlutterError.presentError(details);
-  debugPrint(details.exceptionAsString());
-  debugPrintStack(stackTrace: details.stack);
+    FlutterError.presentError(details);
+    debugPrint(details.exceptionAsString());
+    debugPrintStack(stackTrace: details.stack);
   };
+
   runApp(const ResQApp());
 }
-
-// Helper to access Supabase client anywhere in the app 
-//final supabase = Supabase.instance.client;
 
 class ResQApp extends StatefulWidget {
   const ResQApp({super.key});
@@ -49,19 +50,15 @@ class ResQApp extends StatefulWidget {
 }
 
 class _ResQAppState extends State<ResQApp> {
-
   @override
   void initState() {
     super.initState();
 
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-
       final event = data.event;
-
       debugPrint('AUTH EVENT: $event');
 
       if (event == AuthChangeEvent.passwordRecovery) {
-
         navigatorKey.currentState?.push(
           MaterialPageRoute(
             builder: (_) => const ResetPasswordScreen(),
@@ -73,18 +70,15 @@ class _ResQAppState extends State<ResQApp> {
 
   @override
   Widget build(BuildContext context) {
-
     return MaterialApp(
       navigatorKey: navigatorKey,
       scaffoldMessengerKey: scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       title: 'ResQ App',
-
       theme: ThemeData(
         primarySwatch: Colors.red,
         scaffoldBackgroundColor: const Color(0xFFF5F0EB),
       ),
-
       home: const MainScreen(),
     );
   }
@@ -101,39 +95,39 @@ class _MainScreenState extends State<MainScreen> {
   int currentIndex = 0;
   final AuthService _authService = AuthService();
 
-
   @override
   void initState() {
     super.initState();
 
+    // Single source of truth for notification navigation.
+    // The post-frame callback and this handler previously raced each other;
+    // now only this callback is used.
     NotificationService.onNotificationTap = () {
       if (!mounted) return;
-
-      final nav =
-        NotificationService.pendingNavigation;
-
-      if (nav == 'report') {
-
-        setState(() {
-          currentIndex = 2;
-        });
-      }
-    };
-
-    // Check if app was opened from a notification
-    WidgetsBinding.instance.addPostFrameCallback((_) {
       final nav = NotificationService.pendingNavigation;
       if (nav == 'news') {
-        setState(() => currentIndex = 3); // News tab index
-        NotificationService.pendingNavigation = null;
+        setState(() => currentIndex = 3);
       } else if (nav == 'report') {
-        setState(() => currentIndex = 2); // Map tab index
-        NotificationService.pendingNavigation = null;
+        setState(() => currentIndex = 2);
       }
+      // Clear after handling so it doesn't re-trigger on rebuilds
+      NotificationService.pendingNavigation = null;
+    };
+
+    // Handle the case where the app was launched cold from a notification
+    // (terminated state). The callback above won't fire in that scenario so
+    // we check once after the first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = NotificationService.pendingNavigation;
+      if (nav == null) return;
+      if (nav == 'news') {
+        setState(() => currentIndex = 3);
+      } else if (nav == 'report') {
+        setState(() => currentIndex = 2);
+      }
+      NotificationService.pendingNavigation = null;
     });
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -143,9 +137,7 @@ class _MainScreenState extends State<MainScreen> {
         final bool canReport = _authService.isLoggedIn;
 
         final List<Widget> screens = [
-          canReport
-              ? const ReportScreen()
-              : const _GuestReportBlock(),
+          canReport ? const ReportScreen() : const _GuestReportBlock(),
           const HotlineScreen(),
           const MapScreen(),
           const NewsScreen(),
@@ -165,15 +157,15 @@ class _MainScreenState extends State<MainScreen> {
             onTap: (index) => setState(() => currentIndex = index),
             items: const [
               BottomNavigationBarItem(
-                  icon: Icon(Icons.report_outlined), label: "Report"),
+                  icon: Icon(Icons.report_outlined), label: 'Report'),
               BottomNavigationBarItem(
-                  icon: Icon(Icons.phone_outlined), label: "Hotline"),
+                  icon: Icon(Icons.phone_outlined), label: 'Hotline'),
               BottomNavigationBarItem(
-                  icon: Icon(Icons.map_outlined), label: "Map"),
+                  icon: Icon(Icons.map_outlined), label: 'Map'),
               BottomNavigationBarItem(
-                  icon: Icon(Icons.article_outlined), label: "News"),
+                  icon: Icon(Icons.article_outlined), label: 'News'),
               BottomNavigationBarItem(
-                  icon: Icon(Icons.person_outline), label: "Profile"),
+                  icon: Icon(Icons.person_outline), label: 'Profile'),
             ],
           ),
         );
@@ -223,7 +215,8 @@ class _GuestReportBlock extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'You need an account to submit incident reports. Guest users can only view reports.',
+                'You need an account to submit incident reports. '
+                'Guest users can only view reports.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: Colors.black45),
               ),
@@ -257,4 +250,3 @@ class _GuestReportBlock extends StatelessWidget {
     );
   }
 }
-

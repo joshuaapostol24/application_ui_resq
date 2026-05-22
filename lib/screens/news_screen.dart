@@ -276,7 +276,7 @@ String _formatDate(dynamic raw) {
               item: _pinned!,
               icon: _icon(_pinned!['category'] ?? ''),
               color: _color(_pinned!['priority'] ?? ''),
-              date: _formatDate(_pinned!['date']),
+              date: _formatDate(_pinned!['createdAt'] ?? _pinned!['date']),
             ),
             const SizedBox(height: 16),
             const Padding(
@@ -299,7 +299,7 @@ String _formatDate(dynamic raw) {
                   item: item,
                   icon: _icon(item['category'] ?? ''),
                   color: _color(item['priority'] ?? ''),
-                  date: _formatDate(item['date']),
+                  date: _formatDate(item['createdAt'] ?? item['date']),
                 ),
               )),
         ],

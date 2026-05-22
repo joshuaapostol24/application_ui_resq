@@ -42,44 +42,31 @@ class _MapScreenState extends State<MapScreen> {
     _fetchReports();
   }
 
-  void _handleNotificationNavigation() {
-    final reportId =
-      NotificationService.pendingReportId;
-
+    void _handleNotificationNavigation() {
+    // Capture and immediately clear so failed lookups don't loop
+    final reportId = NotificationService.pendingReportId;
+    final nav = NotificationService.pendingNavigation;
+    NotificationService.pendingReportId = null;
+    NotificationService.pendingNavigation = null;
+ 
     if (reportId == null) return;
-
+ 
     try {
-
       final report = _reports.firstWhere(
         (r) => r.id.toString() == reportId,
       );
-
-      // Move map to report
-      _mapController.move(
-        report.latLng,
-        16,
-      );
-
-      // Open report details
+ 
+      _mapController.move(report.latLng, 16);
+ 
       Future.delayed(
         const Duration(milliseconds: 500),
         () {
-
           if (!mounted) return;
-
           _showDetail(report);
         },
       );
-
-      // Clear pending state
-      NotificationService.pendingReportId = null;
-      NotificationService.pendingNavigation = null;
-
     } catch (e) {
-
-      debugPrint(
-        'Report from notification not found'
-      );
+      debugPrint('Report from notification not found: $e');
     }
   }
   
