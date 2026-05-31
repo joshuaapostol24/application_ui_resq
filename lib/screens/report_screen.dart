@@ -245,7 +245,7 @@ class _ReportScreenState extends State<ReportScreen> {
             ),
             const SizedBox(height: 12),
             _SeveritySelector(
-              levels: const ['Low', 'Medium', 'High', 'Critical'],
+              levels: const ['Low', 'Medium', 'High'],
               selected: selectedSeverity,
               onSelect: (val) => setState(() => selectedSeverity = val),
             ),

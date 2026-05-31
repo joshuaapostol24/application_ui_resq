@@ -393,7 +393,6 @@ class _SignUpForm extends StatefulWidget {
 class _SignUpFormState extends State<_SignUpForm> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _addressController = TextEditingController();
   final _emailController = TextEditingController();
   final _mobileController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -403,6 +402,25 @@ class _SignUpFormState extends State<_SignUpForm> {
   bool _isLoading = false;
 
   final _idNumberController = TextEditingController();
+
+  String? _selectedBarangay;
+
+  static const List<String> _barangays = [
+    'Balansay',
+    'Fatima',
+    'Payompon',
+    'Poblacion 1',
+    'Poblacion 2',
+    'Poblacion 3',
+    'Poblacion 4',
+    'Poblacion 5',
+    'Poblacion 6',
+    'Poblacion 7',
+    'Poblacion 8',
+    'Talabaan',
+    'Tangkalan',
+    'Tayamaan',
+  ];
 
   String _selectedIdType = 'National ID';
 
@@ -438,7 +456,6 @@ class _SignUpFormState extends State<_SignUpForm> {
   @override
   void dispose() {
     _nameController.dispose();
-    _addressController.dispose();
     _emailController.dispose();
     _mobileController.dispose();
     _passwordController.dispose();
@@ -492,7 +509,7 @@ class _SignUpFormState extends State<_SignUpForm> {
     // ── Step 2: Sign up, passing the image URL directly ──
     final result = await AuthService().signUp(
       name: _nameController.text.trim(),
-      address: _addressController.text.trim(),
+      address: 'Barangay $_selectedBarangay',
       email: _emailController.text.trim(),
       mobileNumber: _mobileController.text.trim(),
       idType: _selectedIdType,
@@ -569,17 +586,55 @@ class _SignUpFormState extends State<_SignUpForm> {
             ),
             const SizedBox(height: 16),
 
-            // Address
-            _FormLabel(label: 'Home Address'),
+            // Barangay
+            const _FormLabel(label: 'Barangay (Mamburao, Occ. Mindoro)'),
             const SizedBox(height: 6),
-            _ResQTextField(
-              controller: _addressController,
-              hint: 'Barangay, Municipality, Province',
-              keyboardType: TextInputType.streetAddress,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Address is required';
-                return null;
-              },
+            DropdownButtonFormField<String>(
+              initialValue: _selectedBarangay,
+              decoration: InputDecoration(
+                hintText: 'Select your barangay',
+                hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE8E0D8)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE8E0D8)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                      color: Color(0xFFF5A623), width: 1.5),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.red),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: Colors.red, width: 1.5),
+                ),
+              ),
+              isExpanded: true,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                  color: Colors.black45),
+              items: _barangays
+                  .map((brgy) => DropdownMenuItem(
+                        value: brgy,
+                        child: Text(brgy,
+                            style: const TextStyle(
+                                fontSize: 14, color: Colors.black87)),
+                      ))
+                  .toList(),
+              onChanged: (val) => setState(() => _selectedBarangay = val),
+              validator: (val) =>
+                  val == null ? 'Please select your barangay' : null,
             ),
             const SizedBox(height: 16),
 
