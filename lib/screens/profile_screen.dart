@@ -499,6 +499,7 @@ class _SignUpFormState extends State<_SignUpForm> {
     'Poblacion 6',
     'Poblacion 7',
     'Poblacion 8',
+    'San Luis',
     'Talabaan',
     'Tangkalan',
     'Tayamaan',
