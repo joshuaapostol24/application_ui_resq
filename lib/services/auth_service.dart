@@ -95,7 +95,7 @@ class AuthService extends ChangeNotifier {
 
       final status = (data['status'] ?? 'pending').toString().toLowerCase();
 
-      if (status == 'pending' || status == 'rejected') {
+      if (status == 'pending' || status == 'rejected' || status == 'banned') {
         // BUG FIX: sign out of Supabase Auth so the JWT doesn't remain live
         // while the app shows the user as a guest.
         await _supabase.auth.signOut();
@@ -244,6 +244,13 @@ class AuthService extends ChangeNotifier {
         return {
           'success': false,
           'message': 'Your account has been rejected by the admin.',
+        };
+      }
+
+      if (status == 'banned') {
+        return {
+          'success': false,
+          'message': 'Your account has been banned. Please contact the administrator for assistance.',
         };
       }
 

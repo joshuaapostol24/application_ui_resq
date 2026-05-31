@@ -7,6 +7,7 @@ import '../services/storage_service.dart';
 import 'dart:io';
 import '../main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -372,6 +373,87 @@ class _LoginFormState extends State<_LoginForm> {
                         fontSize: 15)),
               ),
             ),
+            const SizedBox(height: 32),
+
+            // ── Admin contact ──
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8EE),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFFE0B2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: Color(0xFFF5A623),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Account issues?',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        const Text(
+                          'If your account has been rejected or banned and you need assistance, please reach out to the administrator.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.black54,
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        GestureDetector(
+                          onTap: () async {
+                            final Uri emailUri = Uri(
+                              scheme: 'mailto',
+                              path: 'admin@resq.com',
+                              query: 'subject=Account%20Assistance%20Request',
+                            );
+                            if (await canLaunchUrl(emailUri)) {
+                              await launchUrl(emailUri);
+                            }
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.mail_outline,
+                                size: 14,
+                                color: Color(0xFFF5A623),
+                              ),
+                              SizedBox(width: 5),
+                              Text(
+                                'admin@resq.com',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFF5A623),
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: Color(0xFFF5A623),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 24),
           ],
         ),
@@ -511,7 +593,7 @@ class _SignUpFormState extends State<_SignUpForm> {
       name: _nameController.text.trim(),
       address: 'Barangay $_selectedBarangay',
       email: _emailController.text.trim(),
-      mobileNumber: _mobileController.text.trim(),
+      mobileNumber: '+63${_mobileController.text.trim()}',
       idType: _selectedIdType,
       idNumber: _idNumberController.text.trim(),
       idImageUrl: uploadedImageUrl,   // ← pass it here, not in a separate update
@@ -657,28 +739,29 @@ class _SignUpFormState extends State<_SignUpForm> {
             const SizedBox(height: 16),
 
             // Mobile number
-            _FormLabel(label: 'Mobile Number'),
+            const _FormLabel(label: 'Mobile Number'),
             const SizedBox(height: 6),
             _ResQTextField(
               controller: _mobileController,
-              hint: '09XX XXX XXXX',
-              keyboardType: TextInputType.phone,
+              hint: '9XX XXX XXXX',
+              prefixText: '+63 ',
+              keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(11),
+                LengthLimitingTextInputFormatter(10), // 10 digits after +63
               ],
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Mobile number is required';
-                // Philippine mobile: starts with 09, exactly 11 digits
-                if (!RegExp(r'^09\d{9}$').hasMatch(v.trim())) {
-                  return 'Enter a valid PH mobile number (09XX XXX XXXX)';
+                // Must be 10 digits starting with 9
+                if (!RegExp(r'^9\d{9}$').hasMatch(v.trim())) {
+                  return 'Enter a valid PH number starting with +63 (e.g. 9XX XXX XXXX)';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 16),
             // ID Type
-            _FormLabel(label: 'Valid ID Type'),
+            const _FormLabel(label: 'Valid ID Type'),
             const SizedBox(height: 6),
 
             Container(
@@ -1314,6 +1397,7 @@ class _ResQTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final String? Function(String?)? validator;
   final List<TextInputFormatter>? inputFormatters;
+  final String? prefixText;
 
   const _ResQTextField({
     required this.controller,
@@ -1323,6 +1407,7 @@ class _ResQTextField extends StatelessWidget {
     this.suffixIcon,
     this.validator,
     this.inputFormatters,
+    this.prefixText,
   });
 
   @override
@@ -1342,6 +1427,12 @@ class _ResQTextField extends StatelessWidget {
         fillColor: Colors.white,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        prefixText: prefixText,
+        prefixStyle: const TextStyle(
+          color: Colors.black87,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFE8E0D8)),
